@@ -34,7 +34,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *
  * @author <a href="mailto:david.lloyd@redhat.com">David M. Lloyd</a>
  */
-final class ModularURLStreamHandlerProvider extends URLStreamHandlerProvider {
+public final class ModularURLStreamHandlerProvider extends URLStreamHandlerProvider {
     private static final PrivilegedAction<String> URL_MODULES_LIST_ACTION = new PropertyReadAction("jboss.protocol.handler.modules");
 
     private static final List<Module> modules;
@@ -72,7 +72,7 @@ final class ModularURLStreamHandlerProvider extends URLStreamHandlerProvider {
         modules = list;
     }
 
-    static final ModularURLStreamHandlerProvider INSTANCE = new ModularURLStreamHandlerProvider();
+    public static final ModularURLStreamHandlerProvider INSTANCE = new ModularURLStreamHandlerProvider();
 
     static void addHandlerModule(Module module) {
         modules.add(module);
