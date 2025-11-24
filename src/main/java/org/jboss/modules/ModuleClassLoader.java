@@ -121,7 +121,34 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
         }
         transformer = configuration.getTransformer();
     }
+    @Override
+    public Class<?> loadClass(final String className) throws ClassNotFoundException {
+        if (Module.isRuntime()) {
+            Class<?> clazz = getModule().getCache().getClassFromCache(className);
+            if (clazz != null) {
+                return clazz;
+            }
+        }
+        return super.loadClass(className);
+    }
 
+    /**
+     * Loads the class with the specified binary name.
+     *
+     * @param className The binary name of the class
+     * @param resolve {@code true} if the class should be linked after loading
+     * @return the resulting {@code Class} instance
+     */
+    @Override
+    public Class<?> loadClass(final String className, boolean resolve) throws ClassNotFoundException {
+        if (Module.isRuntime()) {
+            Class<?> clazz = getModule().getCache().getClassFromCache(className);
+            if (clazz != null) {
+                return clazz;
+            }
+        }
+        return super.loadClass(className, resolve);
+    }
     /**
      * Recalculate the path maps for this module class loader.
      *
@@ -185,6 +212,12 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
                 resolveClass(loadedClass);
             }
             return loadedClass;
+        }
+        if (Module.isRuntime()) {
+            Class<?> inCache = getModule().getCache().getClassFromCache(className);
+            if (inCache != null) {
+                return inCache;
+            }
         }
         final ModuleLogger log = Module.log;
         final Module module = this.module;
@@ -374,6 +407,16 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
                 map.put(codeSource, protectionDomain);
             }
             return protectionDomain;
+        }
+    }
+    
+    void cleanupProtectionDomains() {
+        protectionDomains.clear();
+    }
+    void restorePropectionDomain(PermissionCollection permissions) {
+        for(CodeSource codeSource : protectionDomains.keySet()) {
+            ProtectionDomain protectionDomain = new ModularProtectionDomain(codeSource, permissions, this);
+            protectionDomains.put(codeSource, protectionDomain);
         }
     }
 
@@ -591,6 +634,12 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
     @Override
     public final InputStream findResourceAsStream(final String name, boolean exportsOnly) {
         try {
+            if (Module.isRuntime()) {
+                InputStream inCache = getModule().getCache().getResourceAsStream(name);
+                if (inCache != null) {
+                    return inCache;
+                }
+            }
             return module.getResourceAsStream(name);
         } catch (IOException e) {
             return null;

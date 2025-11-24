@@ -111,7 +111,7 @@ public abstract class ConcurrentClassLoader extends NamedClassLoader {
      * @throws ClassNotFoundException if the class was not found
      */
     @Override
-    public final Class<?> loadClass(final String className) throws ClassNotFoundException {
+    public Class<?> loadClass(final String className) throws ClassNotFoundException {
         return performLoadClass(className, false, false);
     }
 
@@ -123,7 +123,7 @@ public abstract class ConcurrentClassLoader extends NamedClassLoader {
      * @return the resulting {@code Class} instance
      */
     @Override
-    public final Class<?> loadClass(final String className, boolean resolve) throws ClassNotFoundException {
+    public Class<?> loadClass(final String className, boolean resolve) throws ClassNotFoundException {
         return performLoadClass(className, false, resolve);
     }
 

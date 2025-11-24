@@ -25,6 +25,7 @@ import java.io.InputStream;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.net.URLConnection;
@@ -42,11 +43,13 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.NoSuchElementException;
 import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
+import org.jboss.modules.ClassCache.DefaultClassCache;
 
 import org.jboss.modules._private.ModulesPrivateAccess;
 import org.jboss.modules.filter.ClassFilter;
@@ -75,6 +78,8 @@ public final class Module {
 
     private static final AtomicReference<ModuleLoader> BOOT_MODULE_LOADER;
     private static final MethodType MAIN_METHOD_TYPE = MethodType.methodType(void.class, String[].class);
+    private static final MethodType PRE_MAIN_METHOD_TYPE = MethodType.methodType(void.class, String[].class);
+
 
     static {
         log = NoopModuleLogger.getInstance();
@@ -187,7 +192,7 @@ public final class Module {
     /**
      * The assigned permission collection.
      */
-    private final PermissionCollection permissionCollection;
+    private PermissionCollection permissionCollection;
     /**
      * The (optional) module version.
      */
@@ -204,8 +209,18 @@ public final class Module {
      */
     private volatile Linkage linkage = Linkage.NONE;
 
+    private Class<?> moduleMainClass;
+    private MethodHandle mainMethod;
+    private List<PermissionData> permissions = new ArrayList<>();
+    private ClassCache classCache;
+
     // private constants
 
+    private static class PermissionData {
+        private String path;
+        private String action;
+        private Constructor constructor;
+    }
     private static final RuntimePermission GET_DEPENDENCIES;
     private static final RuntimePermission GET_CLASS_LOADER;
     private static final RuntimePermission GET_BOOT_MODULE_LOADER;
@@ -239,6 +254,52 @@ public final class Module {
         if (factory != null) moduleClassLoader = factory.create(configuration);
         if (moduleClassLoader == null) moduleClassLoader = new ModuleClassLoader(configuration);
         this.moduleClassLoader = moduleClassLoader;
+        classCache = ClassCache.DEFAULT;
+    }
+
+    public ClassCache getCache() {
+        return classCache;
+    }
+
+    public void setClassCache(ClassCache classCache) {
+        this.classCache = classCache;
+        this.classCache.setModule(this);
+    }
+
+    /**
+     * Called in a Graal VM context at the end of Build time.
+     * TO BE REMOVED, no more permissions handling in latest JDK.
+     * @throws Exception 
+     */
+    public void cleanupPermissions() throws Exception {
+        if (this.permissionCollection != null) {
+            Iterator<Permission> it = this.permissionCollection.elements().asIterator();
+            while (it.hasNext()) {
+                Permission p = it.next();
+                PermissionData fpd = new PermissionData();
+                fpd.action = p.getActions();
+                fpd.path = p.getName();
+                fpd.constructor = p.getClass().getConstructor(String.class, String.class);
+                permissions.add(fpd);
+            }
+            permissionCollection = null;
+        }
+        getClassLoader().cleanupProtectionDomains();
+    }
+
+    /**
+     * Called in a Graal VM context at the start of runtime.
+     * TO BE REMOVED, no more permissions handling in latest JDK.
+     * @throws Exception 
+     */
+    public void restorePermissions() throws Exception {
+        final Permissions perms = new Permissions();
+        for(PermissionData p : permissions) {
+            Permission pem = (Permission)p.constructor.newInstance(p.path, p.action);
+            perms.add(pem);
+        }
+        permissionCollection = copyPermissions(perms);
+        getClassLoader().restorePropectionDomain(permissionCollection);
     }
 
     private static PermissionCollection noPermissions() {
@@ -312,9 +373,17 @@ public final class Module {
     public void run(final String[] args) throws NoSuchMethodException, InvocationTargetException, ClassNotFoundException {
         run(mainClassName, args);
     }
+    
+    /**
+     * Pre Run the given main class, preMain method in this module. That is called in Graal VM context static initializer. 
+     * @param args the arguments to pass
+     */
+    public void preRun(final String[] args) throws NoSuchMethodException, InvocationTargetException, ClassNotFoundException {
+        preRun(mainClassName, args);
+    }
 
     /**
-     * Run the given main class in this module.
+     * Pre Run the given main class, preMain method in this module. That is called in Graal VM context static initializer.
      *
      * @param className the class name to run (must not be {@code null})
      * @param args the arguments to pass
@@ -322,7 +391,49 @@ public final class Module {
      * @throws InvocationTargetException if the main method failed
      * @throws ClassNotFoundException if the main class is not found
      */
+    private void preRun(final String className, final String[] args) throws NoSuchMethodException, InvocationTargetException, ClassNotFoundException {
+        if (className == null) {
+            throw new NoSuchMethodException("No main class defined for " + this);
+        }
+        final ClassLoader oldClassLoader = SecurityActions.setContextClassLoader(moduleClassLoader);
+        try {
+            moduleMainClass = Class.forName(className, false, moduleClassLoader);
+            try {
+                Class.forName(className, true, moduleClassLoader);
+            } catch (Throwable t) {
+                throw new InvocationTargetException(t, "Failed to initialize main class '" + className + "'");
+            }
+            final MethodHandles.Lookup lookup = MethodHandles.publicLookup();
+            try {
+                mainMethod = lookup.findStatic(moduleMainClass, "main", MAIN_METHOD_TYPE);
+            } catch (IllegalAccessException e) {
+                throw new NoSuchMethodException("The main method is not public");
+            }
+            
+            try {
+                MethodHandle preMainMethod = lookup.findStatic(moduleMainClass, "preMain", PRE_MAIN_METHOD_TYPE);
+                preMainMethod.invokeExact(args);
+            } catch (Throwable e) {
+                throw new InvocationTargetException(e);
+            }
+            
+        } finally {
+            SecurityActions.setContextClassLoader(oldClassLoader);
+        }
+    }
     public void run(final String className, final String[] args) throws NoSuchMethodException, InvocationTargetException, ClassNotFoundException {
+        try {
+            if (mainMethod == null) {
+                doRun(className, args);
+            } else {
+                mainMethod.invokeExact(args);
+            }
+        } catch (Throwable throwable) {
+            throw new InvocationTargetException(throwable);
+        }
+    }
+    
+    private void doRun(final String className, final String[] args) throws NoSuchMethodException, InvocationTargetException, ClassNotFoundException {
         if (className == null) {
             throw new NoSuchMethodException("No main class defined for " + this);
         }
@@ -665,6 +776,14 @@ public final class Module {
      */
     public static Module getCallerModule() {
         return forClass(STACK_WALKER.getCallerClass());
+    }
+
+    public static boolean isRuntime() {
+        return Boolean.getBoolean("org.wildfly.graal");
+    }
+
+    public static boolean isBuildTime() {
+        return Boolean.getBoolean("org.wildfly.graal.build.time");
     }
 
     /**
@@ -1589,6 +1708,28 @@ public final class Module {
         return subtract;
     }
 
+    public Set<String> getServices() throws ModuleLoadException {
+        Set<String> services = new HashSet<>();
+        Map<String, List<LocalLoader>> paths = getPaths();
+        
+        for(Entry<String, List<LocalLoader>> entry : paths.entrySet()) {
+            if(entry.getKey().startsWith("META-INF/services")) {
+                List<LocalLoader> l = paths.get(entry.getKey());
+                for(LocalLoader loader : l) {
+                    if (loader instanceof IterableLocalLoader) {
+                        IterableLocalLoader it = (IterableLocalLoader) loader;
+                        Iterator<Resource> res = it.iterateResources("META-INF/services", false);
+                        while(res.hasNext()) {
+                            String name = res.next().getName();
+                            name = name.substring(name.lastIndexOf("/")+1, name.length());
+                            services.add(name);
+                        }
+                    }
+                }
+            }
+        }
+        return services;
+    }
     Map<String, List<LocalLoader>> getPaths() throws ModuleLoadException {
         Linkage oldLinkage = this.linkage;
         Linkage linkage;

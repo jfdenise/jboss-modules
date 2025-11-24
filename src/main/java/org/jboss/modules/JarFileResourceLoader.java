@@ -77,7 +77,11 @@ final class JarFileResourceLoader extends AbstractResourceLoader implements Iter
             throw new IllegalArgumentException("rootName is null");
         }
         fileOfJar = new File(jarFile.getName());
-        this.jarFile = jarFile;
+        if (!Module.isBuildTime()) {
+            this.jarFile = jarFile;
+        } else {
+            this.jarFile = null;
+        }
         this.rootName = rootName;
         String realPath = relativePath == null ? null : PathUtils.canonicalize(relativePath);
         if (realPath != null && realPath.endsWith("/")) realPath = realPath.substring(0, realPath.length() - 1);
@@ -91,6 +95,21 @@ final class JarFileResourceLoader extends AbstractResourceLoader implements Iter
         }
     }
 
+    private JarFile getJarFile() {
+        if (jarFile == null) {
+            return buildJarFile();
+        } else {
+            return jarFile;
+        }
+    }
+
+    private JarFile buildJarFile() {
+        try {
+            return new JarFile(fileOfJar, true, JarFile.OPEN_READ, JarFile.runtimeVersion());
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
     private static URI getJarURI(final URI original, final String nestedPath) throws URISyntaxException {
         final StringBuilder b = new StringBuilder();
         b.append("file:");
@@ -119,7 +138,8 @@ final class JarFileResourceLoader extends AbstractResourceLoader implements Iter
 
     public synchronized ClassSpec getClassSpec(final String fileName) throws IOException {
         final ClassSpec spec = new ClassSpec();
-        final JarEntry entry = getJarEntry(fileName);
+        JarFile jarFile = getJarFile();
+        final JarEntry entry = getJarEntry(jarFile, fileName);
         if (entry == null) {
             // no such entry
             return null;
@@ -175,16 +195,17 @@ final class JarFileResourceLoader extends AbstractResourceLoader implements Iter
         return codeSource;
     }
 
-    private JarEntry getJarEntry(final String fileName) {
+    private JarEntry getJarEntry(JarFile jarFile, final String fileName) {
         return relativePath == null ? jarFile.getJarEntry(fileName) : jarFile.getJarEntry(relativePath + "/" + fileName);
     }
 
     public PackageSpec getPackageSpec(final String name) throws IOException {
         final Manifest manifest;
+        JarFile jarFile = getJarFile();
         if (relativePath == null) {
             manifest = jarFile.getManifest();
         } else {
-            JarEntry jarEntry = getJarEntry("META-INF/MANIFEST.MF");
+            JarEntry jarEntry = getJarEntry(jarFile, "META-INF/MANIFEST.MF");
             if (jarEntry == null) {
                 manifest = null;
             } else {
@@ -203,9 +224,9 @@ final class JarFileResourceLoader extends AbstractResourceLoader implements Iter
 
     public Resource getResource(String name) {
         try {
-            final JarFile jarFile = this.jarFile;
+            final JarFile jarFile = getJarFile();
             name = PathUtils.canonicalize(PathUtils.relativize(name));
-            final JarEntry entry = getJarEntry(name);
+            final JarEntry entry = getJarEntry(jarFile, name);
             if (entry == null) {
                 return null;
             }
@@ -251,6 +272,7 @@ final class JarFileResourceLoader extends AbstractResourceLoader implements Iter
         final String startName = PathUtils.canonicalize(PathUtils.relativize(startPath));
         List<String> directory = this.directory;
         if (directory == null) {
+            JarFile jarFile = getJarFile();
             synchronized (jarFile) {
                 directory = this.directory;
                 if (directory == null) {
@@ -269,7 +291,7 @@ final class JarFileResourceLoader extends AbstractResourceLoader implements Iter
         final Iterator<String> iterator = directory.iterator();
         return new Iterator<>() {
             private Resource next;
-
+            private JarFile jarFile = getJarFile();
             public boolean hasNext() {
                 while (next == null) {
                     if (! iterator.hasNext()) {
@@ -306,7 +328,7 @@ final class JarFileResourceLoader extends AbstractResourceLoader implements Iter
     public Collection<String> getPaths() {
         final Collection<String> index = new HashSet<>();
         index.add("");
-        extractJarPaths(jarFile, relativePath, index);
+        extractJarPaths(getJarFile(), relativePath, index);
         return index;
     }
 
@@ -316,7 +338,9 @@ final class JarFileResourceLoader extends AbstractResourceLoader implements Iter
             super.close();
         } finally {
             try {
-                jarFile.close();
+                if(jarFile != null) {
+                    jarFile.close();
+                }
             } catch (IOException e) {
                 // ignored
             }
@@ -334,7 +358,7 @@ final class JarFileResourceLoader extends AbstractResourceLoader implements Iter
     public ResourceLoader createSubloader(final String relativePath, final String rootName) {
         final String ourRelativePath = this.relativePath;
         final String fixedPath = PathUtils.relativize(PathUtils.canonicalize(relativePath));
-        return new JarFileResourceLoader(rootName, jarFile, ourRelativePath == null ? fixedPath : ourRelativePath + "/" + fixedPath);
+        return new JarFileResourceLoader(rootName, getJarFile(), ourRelativePath == null ? fixedPath : ourRelativePath + "/" + fixedPath);
     }
 
     static void extractJarPaths(final JarFile jarFile, String relativePath, final Collection<String> index) {
