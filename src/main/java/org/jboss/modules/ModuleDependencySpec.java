@@ -69,6 +69,10 @@ public final class ModuleDependencySpec extends DependencySpec {
     public String getName() {
         return name;
     }
+    //Required by WildFly (this is an incompatible change in the dev branch).
+    public String getIdentifier() {
+        return name;
+    }
 
     /**
      * Determine whether this dependency is optional.

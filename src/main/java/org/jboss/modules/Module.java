@@ -25,6 +25,7 @@ import java.io.InputStream;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.net.URLConnection;
@@ -47,6 +48,8 @@ import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import org.jboss.modules._private.ModulesPrivateAccess;
 import org.jboss.modules.filter.ClassFilter;
@@ -359,6 +362,10 @@ public final class Module {
     public String getName() {
         return name;
     }
+    //Required by WildFly (this is an incompatible change in the dev branch).
+    public String getIdentifier() {
+        return name;
+    }
 
     /**
      * Get the module loader which created this module.
@@ -420,12 +427,26 @@ public final class Module {
      */
     public static <S> ServiceLoader<S> loadServiceFromCallerModuleLoader(String name, Class<S> serviceType) throws ModuleLoadException {
         Class<?> caller = STACK_WALKER.getCallerClass();
+        //System.out.println("NAME" + name + "serviceTupe  " + serviceType + " CALLER CLASS " + caller.getName());
         assert ! caller.getPackageName().equals(Module.class.getPackageName());
         Module callerModule = forClass(caller);
         if (callerModule != null) {
             ModuleLoader ml = callerModule.getModuleLoader();
             if (ml != null) {
                 return ml.loadModule(name).loadService(serviceType);
+            }
+        } else {
+            try {
+                Class clazz = Class.forName("launcher.Launcher");
+                synchronized (clazz) {
+                    Field f = clazz.getField("callerModules");
+                    Map<String, Module> modules = (Map<String, Module>) f.get(null);
+                    callerModule = modules.get(name);
+                    System.out.println("GEt caller " + callerModule + " for called module " + name);
+                    return callerModule.getModuleLoader().loadModule(name).loadService(serviceType);
+                }
+            } catch (Exception ex) {
+                throw new ModuleLoadException(ex);
             }
         }
         throw new ModuleLoadException(name);
