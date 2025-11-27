@@ -179,10 +179,12 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
     /** {@inheritDoc} */
     @Override
     protected final Class<?> findClass(String className, boolean exportsOnly, final boolean resolve) throws ClassNotFoundException {
+        System.out.println("FIND CLASS " + className);
         className = className.replace('/', '.');
         // Check if we have already loaded it..
         Class<?> loadedClass = findLoadedClass(className);
         if (loadedClass != null) {
+            System.out.println("CLASS " + className + " Already loaded");
             if (resolve) {
                 resolveClass(loadedClass);
             }

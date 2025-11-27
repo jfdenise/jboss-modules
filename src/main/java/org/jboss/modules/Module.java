@@ -27,6 +27,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLConnection;
 import java.security.AccessController;
@@ -78,6 +79,7 @@ public final class Module {
 
     private static final AtomicReference<ModuleLoader> BOOT_MODULE_LOADER;
     private static final MethodType MAIN_METHOD_TYPE = MethodType.methodType(void.class, String[].class);
+    private static final MethodType POST_MAIN_METHOD_TYPE = MethodType.methodType(void.class);
 
     static {
         log = NoopModuleLogger.getInstance();
@@ -216,7 +218,8 @@ public final class Module {
     private static final RuntimePermission ADD_CONTENT_HANDLER_FACTORY;
     private static final RuntimePermission ADD_URL_STREAM_HANDLER_FACTORY;
     private static final PermissionCollection NO_PERMISSIONS = noPermissions();
-
+    private Class<?> forPostRun;
+    private MethodHandle forPostRunMethod;
     /**
      * Construct a new instance from a module specification.
      *
@@ -241,6 +244,7 @@ public final class Module {
         ModuleClassLoader moduleClassLoader = null;
         if (factory != null) moduleClassLoader = factory.create(configuration);
         if (moduleClassLoader == null) moduleClassLoader = new ModuleClassLoader(configuration);
+        System.out.println("MODULE CLASSLOADER " + moduleClassLoader);
         this.moduleClassLoader = moduleClassLoader;
     }
 
@@ -315,7 +319,23 @@ public final class Module {
     public void run(final String[] args) throws NoSuchMethodException, InvocationTargetException, ClassNotFoundException {
         run(mainClassName, args);
     }
-
+    
+    public void postRun() throws NoSuchMethodException, InvocationTargetException, ClassNotFoundException {
+//        final MethodHandles.Lookup lookup = MethodHandles.publicLookup();
+//        final MethodHandle methodHandle;
+//        try {
+//            methodHandle = lookup.findStatic(forPostRun, "postMain", POST_MAIN_METHOD_TYPE);
+//        } catch (IllegalAccessException e) {
+//            throw new NoSuchMethodException("The main method is not public");
+//        }
+        try {
+           //methodHandle.invokeExact();
+            System.out.println("IN POST RUN JBOSS MODULE, REUSE METHODHANDLE");
+            forPostRunMethod.invokeExact();
+        } catch (Throwable throwable) {
+            throw new InvocationTargetException(throwable);
+        }
+    }
     /**
      * Run the given main class in this module.
      *
@@ -331,7 +351,9 @@ public final class Module {
         }
         final ClassLoader oldClassLoader = SecurityActions.setContextClassLoader(moduleClassLoader);
         try {
-            final Class<?> mainClass = Class.forName(className, false, moduleClassLoader);
+            forPostRun = Class.forName(className, false, moduleClassLoader);
+           // forPostRunMethod = forPostRun.getMethod("postMain");
+            System.out.println("MAIN CLASS " + className + " CLASSLOADER " + forPostRun.getClassLoader());
             try {
                 Class.forName(className, true, moduleClassLoader);
             } catch (Throwable t) {
@@ -340,7 +362,7 @@ public final class Module {
             final MethodHandles.Lookup lookup = MethodHandles.publicLookup();
             final MethodHandle methodHandle;
             try {
-                methodHandle = lookup.findStatic(mainClass, "main", MAIN_METHOD_TYPE);
+                methodHandle = lookup.findStatic(forPostRun, "main", MAIN_METHOD_TYPE);
             } catch (IllegalAccessException e) {
                 throw new NoSuchMethodException("The main method is not public");
             }
@@ -348,6 +370,12 @@ public final class Module {
                 methodHandle.invokeExact(args);
             } catch (Throwable throwable) {
                 throw new InvocationTargetException(throwable);
+            }
+            // Keep a ref on the method handle
+            try {
+                forPostRunMethod = lookup.findStatic(forPostRun, "postMain", POST_MAIN_METHOD_TYPE);
+            } catch (IllegalAccessException e) {
+                throw new NoSuchMethodException("The main method is not public");
             }
         } finally {
             SecurityActions.setContextClassLoader(oldClassLoader);
