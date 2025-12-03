@@ -179,12 +179,12 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
     /** {@inheritDoc} */
     @Override
     protected final Class<?> findClass(String className, boolean exportsOnly, final boolean resolve) throws ClassNotFoundException {
-        System.out.println("FIND CLASS " + className);
+       // System.out.println("FIND CLASS " + className);
         className = className.replace('/', '.');
         // Check if we have already loaded it..
         Class<?> loadedClass = findLoadedClass(className);
         if (loadedClass != null) {
-            System.out.println("CLASS " + className + " Already loaded");
+         //   System.out.println("CLASS " + className + " Already loaded");
             if (resolve) {
                 resolveClass(loadedClass);
             }
@@ -351,10 +351,15 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
 
     private Class<?> doDefineOrLoadClass(final String className, final byte[] bytes, final ByteBuffer byteBuffer, ProtectionDomain protectionDomain) {
         try {
+            
             final Class<?> definedClass = bytes != null ?
                 defineClass(className, bytes, 0, bytes.length, protectionDomain) :
                 defineClass(className, byteBuffer, protectionDomain);
             module.getModuleLoader().incClassCount();
+            if(className.startsWith("org.jboss.")) {
+                System.out.println("% " + className);
+            }
+            //new Exception().printStackTrace();
             return definedClass;
         } catch (LinkageError e) {
             final Class<?> loadedClass = findLoadedClass(className);

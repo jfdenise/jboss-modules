@@ -220,6 +220,7 @@ public final class Module {
     private static final PermissionCollection NO_PERMISSIONS = noPermissions();
     private Class<?> forPostRun;
     private MethodHandle forPostRunMethod;
+    private MethodHandle mainMethod;
     /**
      * Construct a new instance from a module specification.
      *
@@ -244,7 +245,7 @@ public final class Module {
         ModuleClassLoader moduleClassLoader = null;
         if (factory != null) moduleClassLoader = factory.create(configuration);
         if (moduleClassLoader == null) moduleClassLoader = new ModuleClassLoader(configuration);
-        System.out.println("MODULE CLASSLOADER " + moduleClassLoader);
+        //System.out.println("MODULE CLASSLOADER " + moduleClassLoader);
         this.moduleClassLoader = moduleClassLoader;
     }
 
@@ -336,6 +337,9 @@ public final class Module {
             throw new InvocationTargetException(throwable);
         }
     }
+    public void preRun(final String[] args) throws NoSuchMethodException, InvocationTargetException, ClassNotFoundException {
+        preRun(mainClassName, args);
+    }
     /**
      * Run the given main class in this module.
      *
@@ -345,7 +349,58 @@ public final class Module {
      * @throws InvocationTargetException if the main method failed
      * @throws ClassNotFoundException if the main class is not found
      */
+    public void preRun(final String className, final String[] args) throws NoSuchMethodException, InvocationTargetException, ClassNotFoundException {
+        if (className == null) {
+            throw new NoSuchMethodException("No main class defined for " + this);
+        }
+        final ClassLoader oldClassLoader = SecurityActions.setContextClassLoader(moduleClassLoader);
+        try {
+            forPostRun = Class.forName(className, false, moduleClassLoader);
+           // forPostRunMethod = forPostRun.getMethod("postMain");
+            System.out.println("MAIN CLASS " + className + " CLASSLOADER " + forPostRun.getClassLoader());
+            try {
+                Class.forName(className, true, moduleClassLoader);
+            } catch (Throwable t) {
+                System.out.println("ERROR!!!!!");
+                t.printStackTrace();
+                throw new InvocationTargetException(t, "Failed to initialize main class '" + className + "'");
+            }
+            final MethodHandles.Lookup lookup = MethodHandles.publicLookup();
+            try {
+                mainMethod = lookup.findStatic(forPostRun, "main", MAIN_METHOD_TYPE);
+            } catch (IllegalAccessException e) {
+                throw new NoSuchMethodException("The main method is not public");
+            }
+            
+            // Keep a ref on the method handle
+            try {
+                System.out.println("WILL CALL PRE_RUN");
+                forPostRunMethod = lookup.findStatic(forPostRun, "preMain", POST_MAIN_METHOD_TYPE);
+                forPostRunMethod.invokeExact();
+            } catch (Throwable e) {
+                e.printStackTrace();
+                // OK, not ready.
+            }
+            
+        } finally {
+            SecurityActions.setContextClassLoader(oldClassLoader);
+        }
+    }
     public void run(final String className, final String[] args) throws NoSuchMethodException, InvocationTargetException, ClassNotFoundException {
+        System.out.println("RUN " + mainMethod);
+        try {
+            if(mainMethod == null) {
+                run2(className, args);
+            } else {
+                System.out.println("REUSE PRE_MAIN CONTENT");
+                mainMethod.invokeExact(args);
+            }
+        } catch (Throwable throwable) {
+            throw new InvocationTargetException(throwable);
+        }
+    }
+    
+    public void run2(final String className, final String[] args) throws NoSuchMethodException, InvocationTargetException, ClassNotFoundException {
         if (className == null) {
             throw new NoSuchMethodException("No main class defined for " + this);
         }
@@ -372,11 +427,11 @@ public final class Module {
                 throw new InvocationTargetException(throwable);
             }
             // Keep a ref on the method handle
-            try {
-                forPostRunMethod = lookup.findStatic(forPostRun, "postMain", POST_MAIN_METHOD_TYPE);
-            } catch (IllegalAccessException e) {
-                throw new NoSuchMethodException("The main method is not public");
-            }
+//            try {
+//                forPostRunMethod = lookup.findStatic(forPostRun, "postMain", POST_MAIN_METHOD_TYPE);
+//            } catch (IllegalAccessException e) {
+//                throw new NoSuchMethodException("The main method is not public");
+//            }
         } finally {
             SecurityActions.setContextClassLoader(oldClassLoader);
         }
@@ -714,10 +769,20 @@ public final class Module {
      * @return the class
      */
     Class<?> loadModuleClass(final String className, final boolean resolve) throws ClassNotFoundException {
+        
+        StringBuilder b = new StringBuilder();
+        for (String s : systemPackages) {
+            b.append(s +",");
+        }
+        //System.out.println("SYS PACKAGES " + b);
         for (String s : systemPackages) {
             if (className.startsWith(s)) {
+                System.out.println("CLASSNAME IS SYSTEM " + className);
                 return moduleClassLoader.loadClass(className, resolve);
             }
+        }
+        if(className.startsWith("org.jboss")) {
+           // System.out.println("LOAD CLASS " + className);
         }
         final String path = pathOfClass(className);
         final Map<String, List<LocalLoader>> paths = getPathsUnchecked();
