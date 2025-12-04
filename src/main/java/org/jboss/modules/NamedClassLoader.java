@@ -25,10 +25,8 @@ package org.jboss.modules;
  */
 public abstract class NamedClassLoader extends ClassLoader {
     static {
-        if (!Boolean.getBoolean("org.wildfly.graal")) {
-            if (!ClassLoader.registerAsParallelCapable()) {
-                throw new Error("Failed to register " + NamedClassLoader.class.getName() + " as parallel-capable");
-            }
+        if (!ClassLoader.registerAsParallelCapable()) {
+            throw new Error("Failed to register " + NamedClassLoader.class.getName() + " as parallel-capable");
         }
     }
 
