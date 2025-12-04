@@ -557,19 +557,6 @@ public final class Module {
             if (ml != null) {
                 return ml.loadModule(name).loadService(serviceType);
             }
-        } else {
-            try {
-                Class clazz = Class.forName("launcher.Launcher");
-                synchronized (clazz) {
-                    Field f = clazz.getField("callerModules");
-                    Map<String, Module> modules = (Map<String, Module>) f.get(null);
-                    callerModule = modules.get(name);
-                    System.out.println("GEt caller " + callerModule + " for called module " + name);
-                    return callerModule.getModuleLoader().loadModule(name).loadService(serviceType);
-                }
-            } catch (Exception ex) {
-                throw new ModuleLoadException(ex);
-            }
         }
         throw new ModuleLoadException(name);
     }

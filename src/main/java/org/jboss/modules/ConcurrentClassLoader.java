@@ -41,10 +41,8 @@ public abstract class ConcurrentClassLoader extends NamedClassLoader {
     private static final ThreadLocal<Boolean> GET_PACKAGE_SUPPRESSOR = new ThreadLocal<>();
 
     static {
-        if (!Boolean.getBoolean("org.wildfly.graal")) {
-            if (!ClassLoader.registerAsParallelCapable()) {
-                throw new Error("Failed to register " + ConcurrentClassLoader.class.getName() + " as parallel-capable");
-            }
+        if (!ClassLoader.registerAsParallelCapable()) {
+            throw new Error("Failed to register " + ConcurrentClassLoader.class.getName() + " as parallel-capable");
         }
         /*
          This resolves a known deadlock that can occur if one thread is in the process of defining a package as part of
@@ -100,10 +98,8 @@ public abstract class ConcurrentClassLoader extends NamedClassLoader {
      */
     protected ConcurrentClassLoader(String name) {
         super(Utils.getPlatformClassLoader(), name);
-        if (!Boolean.getBoolean("org.wildfly.graal")) {
-            if (!isRegisteredAsParallelCapable()) {
-                throw new Error("Cannot instantiate non-parallel subclass");
-            }
+        if (!isRegisteredAsParallelCapable()) {
+            throw new Error("Cannot instantiate non-parallel subclass");
         }
     }
 
