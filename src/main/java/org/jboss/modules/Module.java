@@ -18,6 +18,7 @@
 
 package org.jboss.modules;
 
+import java.io.File;
 import static java.security.AccessController.doPrivileged;
 
 import java.io.IOException;
@@ -30,6 +31,9 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLConnection;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.security.AccessController;
 import java.security.Permission;
 import java.security.PermissionCollection;
@@ -221,6 +225,8 @@ public final class Module {
     private Class<?> forPostRun;
     private MethodHandle forPostRunMethod;
     private MethodHandle mainMethod;
+    private Set<String> recordedClasses = new HashSet<>();
+    private Set<String> recordedServices = new HashSet<>();
     /**
      * Construct a new instance from a module specification.
      *
@@ -467,6 +473,9 @@ public final class Module {
      * @return the service loader
      */
     public <S> ServiceLoader<S> loadService(Class<S> serviceType) {
+        if(!Boolean.getBoolean("org.wildfly.graal")) {
+            recordService(serviceType);
+        }
         getClass().getModule().addUses(serviceType);
         return ServiceLoader.load(serviceType, moduleClassLoader);
     }
@@ -1230,6 +1239,122 @@ public final class Module {
      */
     public PermissionCollection getPermissionCollection() {
         return permissionCollection;
+    }
+    
+    private Map<String, Class<?>> CACHE = new HashMap<>();
+    private Map<Class<?>, List<Object>> SERVICES = new HashMap<>();
+    public void populateServices(Path dir) throws Exception {
+        Path file = dir.resolve("services_"+getName());
+        if(!Files.exists(file)) {
+            return;
+        }
+        List<String> classes = Files.readAllLines(file);
+        //System.out.println("Module " + getName());
+        for (String className : classes) {
+            System.out.println("Add service cache " + className + " from " + getName());
+            try {
+                Class<?> clazz = getClassLoader().loadClass(className, true);
+                getClass().getModule().addUses(clazz);
+                ServiceLoader<?> sl = ServiceLoader.load(clazz, moduleClassLoader);
+                List<Object> services = new ArrayList<>();
+                for(Object service : sl) {
+                    services.add(service);
+                }
+                SERVICES.put(clazz, services);
+            } catch (Exception ex) {
+                System.out.println("Error adding service cache " + ex);
+            }
+        }
+    }
+    public void addServiceToCache(String className) throws Exception {
+        Class<?> clazz = getClassLoader().loadClass(className, true);
+        ServiceLoader<?> sl = ServiceLoader.load(clazz, moduleClassLoader);
+        List<Object> services = new ArrayList<>();
+        for (Object service : sl) {
+            if(service.getClass().getClassLoader() instanceof ModuleClassLoader) {
+                services.add(service);
+            }
+        }
+        if(!services.isEmpty()) {
+            System.out.println("ADD SERVICES " + services + " for " + getName());
+            SERVICES.put(clazz, services);
+        }
+    }
+    public List<Object> getServicesFromCache(Class<?> type) {
+        return SERVICES.get(type);
+    }
+    public void registerServices(Class<?> type) {
+        System.out.println("REGISTER SERVICE " + type);
+        ServiceLoader loader = loadService(type);
+        List<Object> lst = new ArrayList<>();
+        for(Object obj : loader) {
+            lst.add(obj);
+        }
+        SERVICES.put(type, lst);
+    }
+    public void populateClasses(Path dir) throws Exception {
+        Path file = dir.resolve(getName());
+        if (!Files.exists(file)) {
+            return;
+        }
+        List<String> classes = Files.readAllLines(file);
+        //System.out.println("Module " + getName());
+        for (String className : classes) {
+            //System.out.println("Add to cache " + className);
+            try {
+            Class<?> clazz = getClassLoader().loadClass(className, true);
+            CACHE.put(className, clazz);
+            } catch(Exception ex) {
+                //System.out.println("Error adding to cache " + ex);
+            }
+        }
+    }
+    public void dump() {
+        System.out.append("MODULE " + getName());
+        System.out.append("CL " + getClassLoader());
+        System.out.append("LOADER " + getModuleLoader().toString());
+        System.out.println("CAHCE " + CACHE);
+        for(Dependency d : linkage.getDependencies()) {
+            System.out.println("DEP " + d);
+        }
+    }
+    Class<?> getFromCache(String className) {
+        return CACHE.get(className);
+    }
+    void recordClass(String className) {
+        if (!Boolean.getBoolean("org.wildfly.graal")) {
+            if (className.startsWith("java.") || recordedClasses.contains(className)) {
+                return;
+            }
+            recordedClasses.add(className);
+            try {
+                Path path = java.nio.file.Paths.get(System.getenv("JBOSS_HOME"));
+                Path dir = path.resolve("jboss-modules-store");
+                Files.createDirectories(dir);
+                Path file = dir.resolve(getName());
+                Files.writeString(file, className + "\n", StandardOpenOption.APPEND, StandardOpenOption.CREATE);
+            } catch (IOException ex) {
+                System.out.println(ex);
+            }
+        }
+    }
+    void recordService(Class<?> type) {
+        if (!Boolean.getBoolean("org.wildfly.graal")) {
+            String className = type.getName();
+            if (recordedServices.contains(className)) {
+                return;
+            }
+            recordedServices.add(className);
+            try {
+                Path path = java.nio.file.Paths.get(System.getenv("JBOSS_HOME"));
+                Path dir = path.resolve("jboss-modules-store");
+                Files.createDirectories(dir);
+                Path file = dir.resolve("services_"+getName());
+                Files.writeString(file, className + "\n", StandardOpenOption.APPEND, StandardOpenOption.CREATE);
+            } catch (IOException ex) {
+                System.out.println(ex);
+            }
+        }
     }
 
     // Linking and resolution
