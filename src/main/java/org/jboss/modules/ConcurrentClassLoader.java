@@ -41,10 +41,11 @@ public abstract class ConcurrentClassLoader extends NamedClassLoader {
     private static final ThreadLocal<Boolean> GET_PACKAGE_SUPPRESSOR = new ThreadLocal<>();
 
     static {
-        System.out.println("XXXXXX");
+        if(!Boolean.getBoolean("org.wildfly.graal")) {
             if (!ClassLoader.registerAsParallelCapable()) {
                 throw new Error("Failed to register " + ConcurrentClassLoader.class.getName() + " as parallel-capable");
             }
+        }
         /*
          This resolves a known deadlock that can occur if one thread is in the process of defining a package as part of
          defining a class, and another thread is defining the system package that can result in loading a class.  One holds
@@ -87,8 +88,10 @@ public abstract class ConcurrentClassLoader extends NamedClassLoader {
      */
     protected ConcurrentClassLoader(final ConcurrentClassLoader parent, final String name) {
         super(parent == null ? Utils.getPlatformClassLoader() : parent, name);
+        if(!Boolean.getBoolean("org.wildfly.graal")) {
         if (! isRegisteredAsParallelCapable()) {
             throw new Error("Cannot instantiate non-parallel subclass");
+        }
         }
     }
 
@@ -99,8 +102,10 @@ public abstract class ConcurrentClassLoader extends NamedClassLoader {
      */
     protected ConcurrentClassLoader(String name) {
         super(Utils.getPlatformClassLoader(), name);
+        if(!Boolean.getBoolean("org.wildfly.graal")) {
         if (!isRegisteredAsParallelCapable()) {
             throw new Error("Cannot instantiate non-parallel subclass");
+        }
         }
     }
 
@@ -112,7 +117,7 @@ public abstract class ConcurrentClassLoader extends NamedClassLoader {
      * @throws ClassNotFoundException if the class was not found
      */
     @Override
-    public final Class<?> loadClass(final String className) throws ClassNotFoundException {
+    public Class<?> loadClass(final String className) throws ClassNotFoundException {
         return performLoadClass(className, false, false);
     }
 
@@ -124,7 +129,7 @@ public abstract class ConcurrentClassLoader extends NamedClassLoader {
      * @return the resulting {@code Class} instance
      */
     @Override
-    public final Class<?> loadClass(final String className, boolean resolve) throws ClassNotFoundException {
+    public Class<?> loadClass(final String className, boolean resolve) throws ClassNotFoundException {
         return performLoadClass(className, false, resolve);
     }
 

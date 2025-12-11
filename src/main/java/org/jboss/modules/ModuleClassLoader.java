@@ -34,6 +34,9 @@ import org.jboss.modules.security.ModularProtectionDomain;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.security.CodeSource;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -58,6 +61,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class ModuleClassLoader extends ConcurrentClassLoader {
 
     static {
+        if(!Boolean.getBoolean("org.wildfly.graal")) {
             boolean parallelOk = true;
             try {
                 parallelOk = ClassLoader.registerAsParallelCapable();
@@ -66,6 +70,7 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
             if (!parallelOk) {
                 throw new Error("Failed to register " + ModuleClassLoader.class.getName() + " as parallel-capable");
             }
+        }
     }
 
     private final Module module;
@@ -121,7 +126,30 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
         }
         transformer = configuration.getTransformer();
     }
+    @Override
+    public Class<?> loadClass(final String className) throws ClassNotFoundException {
+        Class<?> clazz = getModule().getFromCache(className);
+        if(clazz != null) {
+            return clazz;
+        }
+        return super.loadClass(className);
+    }
 
+    /**
+     * Loads the class with the specified binary name.
+     *
+     * @param className The binary name of the class
+     * @param resolve {@code true} if the class should be linked after loading
+     * @return the resulting {@code Class} instance
+     */
+    @Override
+    public Class<?> loadClass(final String className, boolean resolve) throws ClassNotFoundException {
+        Class<?> clazz = getModule().getFromCache(className);
+        if(clazz != null) {
+            return clazz;
+        }
+        return super.loadClass(className, resolve);
+    }
     /**
      * Recalculate the path maps for this module class loader.
      *
@@ -177,8 +205,11 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
     /** {@inheritDoc} */
     @Override
     protected final Class<?> findClass(String className, boolean exportsOnly, final boolean resolve) throws ClassNotFoundException {
-       // System.out.println("FIND CLASS " + className);
         className = className.replace('/', '.');
+        if(className.equals("org.jboss.as.server.deployment.scanner.DeploymentScannerExtension")) {
+            System.out.println("ASKING FOR SCANNER EXT, IN CACHE  " + getModule().getFromCache(className) + "Module NAME " + getModule().getName());
+        }
+        getModule().recordClass(className);
         // Check if we have already loaded it..
         Class<?> loadedClass = findLoadedClass(className);
         if (loadedClass != null) {
@@ -187,6 +218,23 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
                 resolveClass(loadedClass);
             }
             return loadedClass;
+        }
+        if (className.equals("com.sun.el.ExpressionFactoryImpl")) {
+            System.out.append("Lookup expression class " + getModule().getName());
+            try {
+                Path dir = Files.createDirectories(java.nio.file.Paths.get("loaded-classes"));
+                Path f = dir.resolve(className);
+                if(!Files.exists(f)) {
+                    Files.createFile(f);
+                }
+                Files.write(f, (getModule().getName() +"\n").getBytes(), StandardOpenOption.APPEND, StandardOpenOption.CREATE);
+            }catch(Exception ex) {
+                ex.printStackTrace();
+            }
+        }
+        Class<?> inCache = getModule().getFromCache(className);
+        if(inCache != null) {
+            return inCache;
         }
         final ModuleLogger log = Module.log;
         final Module module = this.module;
@@ -259,7 +307,6 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
             // no loaders for this path
             return null;
         }
-
         // Check to see if we can define it locally it
         ClassSpec classSpec;
         ResourceLoader resourceLoader;

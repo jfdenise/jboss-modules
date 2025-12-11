@@ -117,7 +117,6 @@ public class ModuleLoader {
         this.canRedefine = canRedefine;
         this.finders = finders;
         skipRegister = true;
-        System.out.println("DO NOT REGISTER MBEAN");
         mxBean = skipRegister ? null : doPrivileged(new PrivilegedAction<ModuleLoaderMXBean>() {
             public ModuleLoaderMXBean run() {
                 ObjectName objectName;
