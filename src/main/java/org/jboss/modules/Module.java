@@ -18,7 +18,6 @@
 
 package org.jboss.modules;
 
-import java.io.File;
 import static java.security.AccessController.doPrivileged;
 
 import java.io.IOException;
@@ -26,9 +25,8 @@ import java.io.InputStream;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
-import java.lang.reflect.Field;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.file.Files;
@@ -53,8 +51,6 @@ import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 import org.jboss.modules._private.ModulesPrivateAccess;
 import org.jboss.modules.filter.ClassFilter;
@@ -473,9 +469,6 @@ public final class Module {
      * @return the service loader
      */
     public <S> ServiceLoader<S> loadService(Class<S> serviceType) {
-        if(!Boolean.getBoolean("org.wildfly.graal")) {
-            recordService(serviceType);
-        }
         getClass().getModule().addUses(serviceType);
         return ServiceLoader.load(serviceType, moduleClassLoader);
     }
@@ -1242,7 +1235,30 @@ public final class Module {
     }
     
     private Map<String, Class<?>> CACHE = new HashMap<>();
+    private static Map<String, Constructor> GLOBAL_CACHE = new HashMap<>();
     private Map<Class<?>, List<Object>> SERVICES = new HashMap<>();
+    private Map<String, Constructor> CONSTRUCTORS = new HashMap<>();
+    public void addConstructorToCache(String key, Constructor c) {
+        CONSTRUCTORS.put(key, c);
+        GLOBAL_CACHE.put(key, c);
+    }
+    public static Constructor getConstructorFromGlobalCache(String className, Class<?>... parameterTypes) {
+        StringBuilder key = new StringBuilder();
+        key.append(className);
+        for(Class<?> type : parameterTypes) {
+            key.append("_" + type.getName());
+        }
+        return GLOBAL_CACHE.get(key.toString());
+    }
+    public Constructor getConstructorFromCache(String className, Class<?>... parameterTypes) {
+        StringBuilder key = new StringBuilder();
+        key.append(className);
+        for(Class<?> type : parameterTypes) {
+            key.append("_" + type.getName());
+        }
+        System.out.println("KEY IS " + key.toString());
+        return CONSTRUCTORS.get(key.toString());
+    }
     public void populateServices(Path dir) throws Exception {
         Path file = dir.resolve("services_"+getName());
         if(!Files.exists(file)) {
@@ -1283,15 +1299,6 @@ public final class Module {
     public List<Object> getServicesFromCache(Class<?> type) {
         return SERVICES.get(type);
     }
-    public void registerServices(Class<?> type) {
-        System.out.println("REGISTER SERVICE " + type);
-        ServiceLoader loader = loadService(type);
-        List<Object> lst = new ArrayList<>();
-        for(Object obj : loader) {
-            lst.add(obj);
-        }
-        SERVICES.put(type, lst);
-    }
     public void populateClasses(Path dir) throws Exception {
         Path file = dir.resolve(getName());
         if (!Files.exists(file)) {
@@ -1300,12 +1307,22 @@ public final class Module {
         List<String> classes = Files.readAllLines(file);
         //System.out.println("Module " + getName());
         for (String className : classes) {
-            //System.out.println("Add to cache " + className);
+//            if(className.equals("com.sun.el.ExpressionFactoryImpl")) {
+//                System.out.println("DO NOT ADD ExpressionFactoryImpl to cache");
+//                continue;
+//            }
+            if(getName().equals("deployment.helloworld.war")) {
+            System.out.println("Add to cache " + className);
+            }
             try {
             Class<?> clazz = getClassLoader().loadClass(className, true);
             CACHE.put(className, clazz);
+            // Add default constructor
+            CONSTRUCTORS.put(className, clazz.getConstructor());
             } catch(Exception ex) {
-                //System.out.println("Error adding to cache " + ex);
+                if(getName().equals("deployment.helloworld.war")) {
+                System.out.println("ERROR adding class " + ex);
+                }
             }
         }
     }
@@ -1318,8 +1335,18 @@ public final class Module {
             System.out.println("DEP " + d);
         }
     }
-    Class<?> getFromCache(String className) {
+    public Set<String> getClassesFromCache() {
+        return CACHE.keySet();
+    }
+    public Class<?> getClassFromCache(String className) {
         return CACHE.get(className);
+    }
+    public void dumpCache() {
+        System.out.println("LOADED CLASSES");
+        for(String className : CACHE.keySet()) {
+            System.out.println(className);
+        }
+        System.out.println("END CLASSES");
     }
     void recordClass(String className) {
         if (!Boolean.getBoolean("org.wildfly.graal")) {
@@ -1328,28 +1355,9 @@ public final class Module {
             }
             recordedClasses.add(className);
             try {
-                Path path = java.nio.file.Paths.get(System.getenv("JBOSS_HOME"));
-                Path dir = path.resolve("jboss-modules-store");
+                Path dir = java.nio.file.Paths.get("jboss-modules-recorded-classes");
                 Files.createDirectories(dir);
                 Path file = dir.resolve(getName());
-                Files.writeString(file, className + "\n", StandardOpenOption.APPEND, StandardOpenOption.CREATE);
-            } catch (IOException ex) {
-                System.out.println(ex);
-            }
-        }
-    }
-    void recordService(Class<?> type) {
-        if (!Boolean.getBoolean("org.wildfly.graal")) {
-            String className = type.getName();
-            if (recordedServices.contains(className)) {
-                return;
-            }
-            recordedServices.add(className);
-            try {
-                Path path = java.nio.file.Paths.get(System.getenv("JBOSS_HOME"));
-                Path dir = path.resolve("jboss-modules-store");
-                Files.createDirectories(dir);
-                Path file = dir.resolve("services_"+getName());
                 Files.writeString(file, className + "\n", StandardOpenOption.APPEND, StandardOpenOption.CREATE);
             } catch (IOException ex) {
                 System.out.println(ex);
