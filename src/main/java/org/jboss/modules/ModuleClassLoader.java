@@ -128,7 +128,7 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
     }
     @Override
     public Class<?> loadClass(final String className) throws ClassNotFoundException {
-        Class<?> clazz = getModule().getFromCache(className);
+        Class<?> clazz = getModule().getClassFromCache(className);
         if(clazz != null) {
             return clazz;
         }
@@ -144,7 +144,7 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
      */
     @Override
     public Class<?> loadClass(final String className, boolean resolve) throws ClassNotFoundException {
-        Class<?> clazz = getModule().getFromCache(className);
+        Class<?> clazz = getModule().getClassFromCache(className);
         if(clazz != null) {
             return clazz;
         }
@@ -202,21 +202,29 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
         return localLoader;
     }
 
-    /** {@inheritDoc} */
-    @Override
-    protected final Class<?> findClass(String className, boolean exportsOnly, final boolean resolve) throws ClassNotFoundException {
-        className = className.replace('/', '.');
-        if(className.equals("org.jboss.as.server.deployment.scanner.DeploymentScannerExtension")) {
-            System.out.println("ASKING FOR SCANNER EXT, IN CACHE  " + getModule().getFromCache(className) + "Module NAME " + getModule().getName());
-        }
-        getModule().recordClass(className);
-        // Check if we have already loaded it..
+    // In order to have an Alias in the substitute
+    private Class<?> getLoadedClass(String className, boolean resolve) {
         Class<?> loadedClass = findLoadedClass(className);
         if (loadedClass != null) {
          //   System.out.println("CLASS " + className + " Already loaded");
             if (resolve) {
                 resolveClass(loadedClass);
             }
+            return loadedClass;
+        }
+        return null;
+    }
+    /** {@inheritDoc} */
+    @Override
+    protected final Class<?> findClass(String className, boolean exportsOnly, final boolean resolve) throws ClassNotFoundException {
+        className = className.replace('/', '.');
+        if(className.equals("org.jboss.as.server.deployment.scanner.DeploymentScannerExtension")) {
+            System.out.println("ASKING FOR SCANNER EXT, IN CACHE  " + getModule().getClassFromCache(className) + "Module NAME " + getModule().getName());
+        }
+        getModule().recordClass(className);
+        // Check if we have already loaded it..
+        Class<?> loadedClass = getLoadedClass(className, resolve);
+        if (loadedClass != null) {
             return loadedClass;
         }
         if (className.equals("com.sun.el.ExpressionFactoryImpl")) {
@@ -232,7 +240,7 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
                 ex.printStackTrace();
             }
         }
-        Class<?> inCache = getModule().getFromCache(className);
+        Class<?> inCache = getModule().getClassFromCache(className);
         if(inCache != null) {
             return inCache;
         }
