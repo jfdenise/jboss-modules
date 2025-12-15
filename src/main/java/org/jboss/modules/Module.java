@@ -1239,8 +1239,10 @@ public final class Module {
     private Map<Class<?>, List<Object>> SERVICES = new HashMap<>();
     private Map<String, Constructor> CONSTRUCTORS = new HashMap<>();
     public void addConstructorToCache(String key, Constructor c) {
-        CONSTRUCTORS.put(key, c);
-        GLOBAL_CACHE.put(key, c);
+        if (!CONSTRUCTORS.containsKey(key)) {
+            CONSTRUCTORS.put(key, c);
+            GLOBAL_CACHE.put(key, c);
+        }
     }
     public static Constructor getConstructorFromGlobalCache(String className, Class<?>... parameterTypes) {
         StringBuilder key = new StringBuilder();
@@ -1256,7 +1258,6 @@ public final class Module {
         for(Class<?> type : parameterTypes) {
             key.append("_" + type.getName());
         }
-        System.out.println("KEY IS " + key.toString());
         return CONSTRUCTORS.get(key.toString());
     }
     public void populateServices(Path dir) throws Exception {
@@ -1267,16 +1268,18 @@ public final class Module {
         List<String> classes = Files.readAllLines(file);
         //System.out.println("Module " + getName());
         for (String className : classes) {
-            System.out.println("Add service cache " + className + " from " + getName());
             try {
                 Class<?> clazz = getClassLoader().loadClass(className, true);
-                getClass().getModule().addUses(clazz);
-                ServiceLoader<?> sl = ServiceLoader.load(clazz, moduleClassLoader);
-                List<Object> services = new ArrayList<>();
-                for(Object service : sl) {
-                    services.add(service);
+                if (!SERVICES.containsKey(clazz)) {
+                    System.out.println("Add service cache " + className + " from " + getName());
+                    getClass().getModule().addUses(clazz);
+                    ServiceLoader<?> sl = ServiceLoader.load(clazz, moduleClassLoader);
+                    List<Object> services = new ArrayList<>();
+                    for (Object service : sl) {
+                        services.add(service);
+                    }
+                    SERVICES.put(clazz, services);
                 }
-                SERVICES.put(clazz, services);
             } catch (Exception ex) {
                 System.out.println("Error adding service cache " + ex);
             }
@@ -1284,16 +1287,18 @@ public final class Module {
     }
     public void addServiceToCache(String className) throws Exception {
         Class<?> clazz = getClassLoader().loadClass(className, true);
-        ServiceLoader<?> sl = ServiceLoader.load(clazz, moduleClassLoader);
-        List<Object> services = new ArrayList<>();
-        for (Object service : sl) {
-            if(service.getClass().getClassLoader() instanceof ModuleClassLoader) {
-                services.add(service);
+        if (!SERVICES.containsKey(clazz)) {
+            ServiceLoader<?> sl = ServiceLoader.load(clazz, moduleClassLoader);
+            List<Object> services = new ArrayList<>();
+            for (Object service : sl) {
+                if (service.getClass().getClassLoader() instanceof ModuleClassLoader) {
+                    services.add(service);
+                }
             }
-        }
-        if(!services.isEmpty()) {
-            System.out.println("ADD SERVICES " + services + " for " + getName());
-            SERVICES.put(clazz, services);
+            if (!services.isEmpty()) {
+                System.out.println("ADD SERVICES " + services + " for " + getName());
+                SERVICES.put(clazz, services);
+            }
         }
     }
     public List<Object> getServicesFromCache(Class<?> type) {
@@ -1307,18 +1312,25 @@ public final class Module {
         List<String> classes = Files.readAllLines(file);
         //System.out.println("Module " + getName());
         for (String className : classes) {
+            if(CACHE.containsKey(className)) {
+                continue;
+            }
 //            if(className.equals("com.sun.el.ExpressionFactoryImpl")) {
 //                System.out.println("DO NOT ADD ExpressionFactoryImpl to cache");
 //                continue;
 //            }
-            if(getName().equals("deployment.helloworld.war")) {
-            System.out.println("Add to cache " + className);
-            }
+            //if(getName().equals("deployment.helloworld.war")) {
+            //System.out.println("Add to cache " + className);
+            //}
             try {
             Class<?> clazz = getClassLoader().loadClass(className, true);
             CACHE.put(className, clazz);
-            // Add default constructor
-            CONSTRUCTORS.put(className, clazz.getConstructor());
+            // Add default constructor if it exists
+            try {
+                CONSTRUCTORS.put(className, clazz.getConstructor());
+            } catch(Exception ex) {
+                // OK
+            }
             } catch(Exception ex) {
                 if(getName().equals("deployment.helloworld.war")) {
                 System.out.println("ERROR adding class " + ex);
