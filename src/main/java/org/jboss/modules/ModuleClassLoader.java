@@ -218,27 +218,10 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
     @Override
     protected final Class<?> findClass(String className, boolean exportsOnly, final boolean resolve) throws ClassNotFoundException {
         className = className.replace('/', '.');
-        if(className.equals("org.jboss.as.server.deployment.scanner.DeploymentScannerExtension")) {
-            System.out.println("ASKING FOR SCANNER EXT, IN CACHE  " + getModule().getClassFromCache(className) + "Module NAME " + getModule().getName());
-        }
-        getModule().recordClass(className);
         // Check if we have already loaded it..
         Class<?> loadedClass = getLoadedClass(className, resolve);
         if (loadedClass != null) {
             return loadedClass;
-        }
-        if (className.equals("com.sun.el.ExpressionFactoryImpl")) {
-            System.out.append("Lookup expression class " + getModule().getName());
-            try {
-                Path dir = Files.createDirectories(java.nio.file.Paths.get("loaded-classes"));
-                Path f = dir.resolve(className);
-                if(!Files.exists(f)) {
-                    Files.createFile(f);
-                }
-                Files.write(f, (getModule().getName() +"\n").getBytes(), StandardOpenOption.APPEND, StandardOpenOption.CREATE);
-            }catch(Exception ex) {
-                ex.printStackTrace();
-            }
         }
         Class<?> inCache = getModule().getClassFromCache(className);
         if(inCache != null) {
@@ -251,6 +234,7 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
         final Class<?> clazz = module.loadModuleClass(className, resolve);
 
         if (clazz != null) {
+            getModule().recordClass(clazz);
             return clazz;
         }
 
@@ -409,10 +393,6 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
                 defineClass(className, bytes, 0, bytes.length, protectionDomain) :
                 defineClass(className, byteBuffer, protectionDomain);
             module.getModuleLoader().incClassCount();
-            //if(className.startsWith("org.jboss.")) {
-            //    System.out.println("% " + className);
-            //}
-            //new Exception().printStackTrace();
             return definedClass;
         } catch (LinkageError e) {
             final Class<?> loadedClass = findLoadedClass(className);
@@ -424,7 +404,7 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
         }
     }
 
-    private final IdentityHashMap<CodeSource, ProtectionDomain> protectionDomains = new IdentityHashMap<>();
+    private IdentityHashMap<CodeSource, ProtectionDomain> protectionDomains = new IdentityHashMap<>();
 
     private ProtectionDomain getProtectionDomain(CodeSource codeSource) {
         final IdentityHashMap<CodeSource, ProtectionDomain> map = protectionDomains;
@@ -436,6 +416,16 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
                 map.put(codeSource, protectionDomain);
             }
             return protectionDomain;
+        }
+    }
+    
+    void cleanupProtectionDomains() {
+        protectionDomains.clear();
+    }
+    void restorePropectionDomain(PermissionCollection permissions) {
+        for(CodeSource codeSource : protectionDomains.keySet()) {
+            ProtectionDomain protectionDomain = new ModularProtectionDomain(codeSource, permissions, this);
+            protectionDomains.put(codeSource, protectionDomain);
         }
     }
 
