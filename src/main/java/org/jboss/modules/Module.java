@@ -78,6 +78,8 @@ public final class Module {
     private static final MethodType MAIN_METHOD_TYPE = MethodType.methodType(void.class, String[].class);
     private static final MethodType POST_MAIN_METHOD_TYPE = MethodType.methodType(void.class);
 
+    private final static Set<String> RECORDED_MODULES = new HashSet<>();
+
     static {
         log = NoopModuleLogger.getInstance();
         BOOT_MODULE_LOADER = new AtomicReference<>();
@@ -127,6 +129,16 @@ public final class Module {
                 return null;
             }
         });
+        String mods = System.getProperty("org.jboss.modules.record.classes.of");
+        if (mods != null) {
+            String[] split = mods.split(",");
+            for (String s : split) {
+                s = s.trim();
+                if (!s.isEmpty()) {
+                    RECORDED_MODULES.add(s);
+                }
+            }
+        }
     }
 
     // static properties
@@ -1353,7 +1365,7 @@ public final class Module {
     private Map<String, Constructor> CONSTRUCTORS = new HashMap<>();
     public void addClassToCache(String className) throws Exception {
         if (!CACHE.containsKey(className)) {
-            System.out.println("ADD TO CACHE " + className);
+            System.out.println("Adding to cache: " + className);
             Class<?> clazz = getClassLoader().loadClass(className, true);
             CACHE.put(className, clazz);
             try {
@@ -1395,13 +1407,13 @@ public final class Module {
     }
 
     void recordClass(Class clazz) {
-        String className = clazz.getName();
-        if (!Boolean.getBoolean("org.wildfly.graal")) {
+        if (!RECORDED_MODULES.isEmpty()) {
+            String className = clazz.getName();
             if (className.startsWith("java.") || CACHE.containsKey(className)) {
                 return;
             }
-            if (getName().equals("deployment.helloworld.war")) {
-                System.out.println("!!!!!!!!!!!!!! PUT CALSS IN CACHE " + className);
+            if (RECORDED_MODULES.contains(getName())) {
+                System.out.println(getName() + " module, recording class: " + className);
                 CACHE.put(className, clazz);
                 // Add default constructor if it exists
                 try {
