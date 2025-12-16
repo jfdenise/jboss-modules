@@ -61,15 +61,13 @@ import java.util.concurrent.atomic.AtomicReference;
 public class ModuleClassLoader extends ConcurrentClassLoader {
 
     static {
-        if(!Boolean.getBoolean("org.wildfly.graal")) {
-            boolean parallelOk = true;
-            try {
-                parallelOk = ClassLoader.registerAsParallelCapable();
-            } catch (Throwable ignored) {
-            }
-            if (!parallelOk) {
-                throw new Error("Failed to register " + ModuleClassLoader.class.getName() + " as parallel-capable");
-            }
+        boolean parallelOk = true;
+        try {
+            parallelOk = ClassLoader.registerAsParallelCapable();
+        } catch (Throwable ignored) {
+        }
+        if (!parallelOk) {
+            throw new Error("Failed to register " + ModuleClassLoader.class.getName() + " as parallel-capable");
         }
     }
 
