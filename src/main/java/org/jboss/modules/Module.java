@@ -29,9 +29,6 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.net.URLConnection;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.security.AccessController;
 import java.security.Permission;
 import java.security.PermissionCollection;
@@ -192,7 +189,7 @@ public final class Module {
     /**
      * The assigned permission collection.
      */
-    private final PermissionCollection permissionCollection;
+    private PermissionCollection permissionCollection;
     /**
      * The (optional) module version.
      */
@@ -211,6 +208,11 @@ public final class Module {
 
     // private constants
 
+    static class PermissionData {
+        private String path;
+        private String action;
+        private Constructor constructor;
+    }
     private static final RuntimePermission GET_DEPENDENCIES;
     private static final RuntimePermission GET_CLASS_LOADER;
     private static final RuntimePermission GET_BOOT_MODULE_LOADER;
@@ -221,8 +223,8 @@ public final class Module {
     private Class<?> forPostRun;
     private MethodHandle forPostRunMethod;
     private MethodHandle mainMethod;
-    private Set<String> recordedClasses = new HashSet<>();
     private Set<String> recordedServices = new HashSet<>();
+    private List<PermissionData> permissions = new ArrayList<>();
     /**
      * Construct a new instance from a module specification.
      *
@@ -249,6 +251,34 @@ public final class Module {
         if (moduleClassLoader == null) moduleClassLoader = new ModuleClassLoader(configuration);
         //System.out.println("MODULE CLASSLOADER " + moduleClassLoader);
         this.moduleClassLoader = moduleClassLoader;
+    }
+
+    public void cleanupPermissions() throws Exception {
+        if (!Boolean.getBoolean("org.wildfly.graal")) {
+            if (this.permissionCollection != null) {
+                Iterator<Permission> it = this.permissionCollection.elements().asIterator();
+                while (it.hasNext()) {
+                    Permission p = it.next();
+                    PermissionData fpd = new PermissionData();
+                    fpd.action = p.getActions();
+                    fpd.path = p.getName();
+                    fpd.constructor = p.getClass().getConstructor(String.class, String.class);
+                    permissions.add(fpd);
+                }
+                permissionCollection = null;
+            }
+            getClassLoader().cleanupProtectionDomains();
+        }
+    }
+
+    public void restorePermissions() throws Exception {
+        final Permissions perms = new Permissions();
+        for(PermissionData p : permissions) {
+            Permission pem = (Permission)p.constructor.newInstance(p.path, p.action);
+            perms.add(pem);
+        }
+        permissionCollection = copyPermissions(perms);
+        getClassLoader().restorePropectionDomain(permissionCollection);
     }
 
     private static PermissionCollection noPermissions() {
@@ -324,16 +354,7 @@ public final class Module {
     }
     
     public void postRun() throws NoSuchMethodException, InvocationTargetException, ClassNotFoundException {
-//        final MethodHandles.Lookup lookup = MethodHandles.publicLookup();
-//        final MethodHandle methodHandle;
-//        try {
-//            methodHandle = lookup.findStatic(forPostRun, "postMain", POST_MAIN_METHOD_TYPE);
-//        } catch (IllegalAccessException e) {
-//            throw new NoSuchMethodException("The main method is not public");
-//        }
         try {
-           //methodHandle.invokeExact();
-            System.out.println("IN POST RUN JBOSS MODULE, REUSE METHODHANDLE");
             forPostRunMethod.invokeExact();
         } catch (Throwable throwable) {
             throw new InvocationTargetException(throwable);
@@ -358,13 +379,9 @@ public final class Module {
         final ClassLoader oldClassLoader = SecurityActions.setContextClassLoader(moduleClassLoader);
         try {
             forPostRun = Class.forName(className, false, moduleClassLoader);
-           // forPostRunMethod = forPostRun.getMethod("postMain");
-            System.out.println("MAIN CLASS " + className + " CLASSLOADER " + forPostRun.getClassLoader());
             try {
                 Class.forName(className, true, moduleClassLoader);
             } catch (Throwable t) {
-                System.out.println("ERROR!!!!!");
-                t.printStackTrace();
                 throw new InvocationTargetException(t, "Failed to initialize main class '" + className + "'");
             }
             final MethodHandles.Lookup lookup = MethodHandles.publicLookup();
@@ -376,7 +393,6 @@ public final class Module {
             
             // Keep a ref on the method handle
             try {
-                System.out.println("WILL CALL PRE_RUN");
                 forPostRunMethod = lookup.findStatic(forPostRun, "preMain", POST_MAIN_METHOD_TYPE);
                 forPostRunMethod.invokeExact();
             } catch (Throwable e) {
@@ -389,12 +405,10 @@ public final class Module {
         }
     }
     public void run(final String className, final String[] args) throws NoSuchMethodException, InvocationTargetException, ClassNotFoundException {
-        System.out.println("RUN " + mainMethod);
         try {
             if(mainMethod == null) {
                 run2(className, args);
             } else {
-                System.out.println("REUSE PRE_MAIN CONTENT");
                 mainMethod.invokeExact(args);
             }
         } catch (Throwable throwable) {
@@ -409,8 +423,6 @@ public final class Module {
         final ClassLoader oldClassLoader = SecurityActions.setContextClassLoader(moduleClassLoader);
         try {
             forPostRun = Class.forName(className, false, moduleClassLoader);
-           // forPostRunMethod = forPostRun.getMethod("postMain");
-            System.out.println("MAIN CLASS " + className + " CLASSLOADER " + forPostRun.getClassLoader());
             try {
                 Class.forName(className, true, moduleClassLoader);
             } catch (Throwable t) {
@@ -428,12 +440,6 @@ public final class Module {
             } catch (Throwable throwable) {
                 throw new InvocationTargetException(throwable);
             }
-            // Keep a ref on the method handle
-//            try {
-//                forPostRunMethod = lookup.findStatic(forPostRun, "postMain", POST_MAIN_METHOD_TYPE);
-//            } catch (IllegalAccessException e) {
-//                throw new NoSuchMethodException("The main method is not public");
-//            }
         } finally {
             SecurityActions.setContextClassLoader(oldClassLoader);
         }
@@ -763,15 +769,10 @@ public final class Module {
         for (String s : systemPackages) {
             b.append(s +",");
         }
-        //System.out.println("SYS PACKAGES " + b);
         for (String s : systemPackages) {
             if (className.startsWith(s)) {
-                System.out.println("CLASSNAME IS SYSTEM " + className);
                 return moduleClassLoader.loadClass(className, resolve);
             }
-        }
-        if(className.startsWith("org.jboss")) {
-           // System.out.println("LOAD CLASS " + className);
         }
         final String path = pathOfClass(className);
         final Map<String, List<LocalLoader>> paths = getPathsUnchecked();
@@ -1235,22 +1236,19 @@ public final class Module {
     }
     
     private Map<String, Class<?>> CACHE = new HashMap<>();
-    private static Map<String, Constructor> GLOBAL_CACHE = new HashMap<>();
     private Map<Class<?>, List<Object>> SERVICES = new HashMap<>();
     private Map<String, Constructor> CONSTRUCTORS = new HashMap<>();
-    public void addConstructorToCache(String key, Constructor c) {
-        if (!CONSTRUCTORS.containsKey(key)) {
-            CONSTRUCTORS.put(key, c);
-            GLOBAL_CACHE.put(key, c);
+    public void addClassToCache(String className) throws Exception {
+        if (!CACHE.containsKey(className)) {
+            System.out.println("ADD TO CACHE " + className);
+            Class<?> clazz = getClassLoader().loadClass(className, true);
+            CACHE.put(className, clazz);
+            try {
+                CONSTRUCTORS.put(className, clazz.getConstructor());
+            } catch(Exception ex) {
+                // OK
+            }
         }
-    }
-    public static Constructor getConstructorFromGlobalCache(String className, Class<?>... parameterTypes) {
-        StringBuilder key = new StringBuilder();
-        key.append(className);
-        for(Class<?> type : parameterTypes) {
-            key.append("_" + type.getName());
-        }
-        return GLOBAL_CACHE.get(key.toString());
     }
     public Constructor getConstructorFromCache(String className, Class<?>... parameterTypes) {
         StringBuilder key = new StringBuilder();
@@ -1259,31 +1257,6 @@ public final class Module {
             key.append("_" + type.getName());
         }
         return CONSTRUCTORS.get(key.toString());
-    }
-    public void populateServices(Path dir) throws Exception {
-        Path file = dir.resolve("services_"+getName());
-        if(!Files.exists(file)) {
-            return;
-        }
-        List<String> classes = Files.readAllLines(file);
-        //System.out.println("Module " + getName());
-        for (String className : classes) {
-            try {
-                Class<?> clazz = getClassLoader().loadClass(className, true);
-                if (!SERVICES.containsKey(clazz)) {
-                    System.out.println("Add service cache " + className + " from " + getName());
-                    getClass().getModule().addUses(clazz);
-                    ServiceLoader<?> sl = ServiceLoader.load(clazz, moduleClassLoader);
-                    List<Object> services = new ArrayList<>();
-                    for (Object service : sl) {
-                        services.add(service);
-                    }
-                    SERVICES.put(clazz, services);
-                }
-            } catch (Exception ex) {
-                System.out.println("Error adding service cache " + ex);
-            }
-        }
     }
     public void addServiceToCache(String className) throws Exception {
         Class<?> clazz = getClassLoader().loadClass(className, true);
@@ -1296,7 +1269,6 @@ public final class Module {
                 }
             }
             if (!services.isEmpty()) {
-                System.out.println("ADD SERVICES " + services + " for " + getName());
                 SERVICES.put(clazz, services);
             }
         }
@@ -1304,75 +1276,26 @@ public final class Module {
     public List<Object> getServicesFromCache(Class<?> type) {
         return SERVICES.get(type);
     }
-    public void populateClasses(Path dir) throws Exception {
-        Path file = dir.resolve(getName());
-        if (!Files.exists(file)) {
-            return;
-        }
-        List<String> classes = Files.readAllLines(file);
-        //System.out.println("Module " + getName());
-        for (String className : classes) {
-            if(CACHE.containsKey(className)) {
-                continue;
-            }
-//            if(className.equals("com.sun.el.ExpressionFactoryImpl")) {
-//                System.out.println("DO NOT ADD ExpressionFactoryImpl to cache");
-//                continue;
-//            }
-            //if(getName().equals("deployment.helloworld.war")) {
-            //System.out.println("Add to cache " + className);
-            //}
-            try {
-            Class<?> clazz = getClassLoader().loadClass(className, true);
-            CACHE.put(className, clazz);
-            // Add default constructor if it exists
-            try {
-                CONSTRUCTORS.put(className, clazz.getConstructor());
-            } catch(Exception ex) {
-                // OK
-            }
-            } catch(Exception ex) {
-                if(getName().equals("deployment.helloworld.war")) {
-                System.out.println("ERROR adding class " + ex);
-                }
-            }
-        }
-    }
-    public void dump() {
-        System.out.append("MODULE " + getName());
-        System.out.append("CL " + getClassLoader());
-        System.out.append("LOADER " + getModuleLoader().toString());
-        System.out.println("CAHCE " + CACHE);
-        for(Dependency d : linkage.getDependencies()) {
-            System.out.println("DEP " + d);
-        }
-    }
-    public Set<String> getClassesFromCache() {
-        return CACHE.keySet();
-    }
+
     public Class<?> getClassFromCache(String className) {
         return CACHE.get(className);
     }
-    public void dumpCache() {
-        System.out.println("LOADED CLASSES");
-        for(String className : CACHE.keySet()) {
-            System.out.println(className);
-        }
-        System.out.println("END CLASSES");
-    }
-    void recordClass(String className) {
+
+    void recordClass(Class clazz) {
+        String className = clazz.getName();
         if (!Boolean.getBoolean("org.wildfly.graal")) {
-            if (className.startsWith("java.") || recordedClasses.contains(className)) {
+            if (className.startsWith("java.") || CACHE.containsKey(className)) {
                 return;
             }
-            recordedClasses.add(className);
-            try {
-                Path dir = java.nio.file.Paths.get("jboss-modules-recorded-classes");
-                Files.createDirectories(dir);
-                Path file = dir.resolve(getName());
-                Files.writeString(file, className + "\n", StandardOpenOption.APPEND, StandardOpenOption.CREATE);
-            } catch (IOException ex) {
-                System.out.println(ex);
+            if (getName().equals("deployment.helloworld.war")) {
+                System.out.println("!!!!!!!!!!!!!! PUT CALSS IN CACHE " + className);
+                CACHE.put(className, clazz);
+                // Add default constructor if it exists
+                try {
+                    CONSTRUCTORS.put(className, clazz.getConstructor());
+                } catch (Exception ex) {
+                    // OK
+                }
             }
         }
     }
