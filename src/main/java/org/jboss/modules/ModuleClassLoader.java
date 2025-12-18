@@ -34,9 +34,6 @@ import org.jboss.modules.security.ModularProtectionDomain;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.security.CodeSource;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -126,7 +123,7 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
     }
     @Override
     public Class<?> loadClass(final String className) throws ClassNotFoundException {
-        Class<?> clazz = getModule().getClassFromCache(className);
+        Class<?> clazz = getModule().getCache().getClassFromCache(className);
         if(clazz != null) {
             return clazz;
         }
@@ -142,7 +139,7 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
      */
     @Override
     public Class<?> loadClass(final String className, boolean resolve) throws ClassNotFoundException {
-        Class<?> clazz = getModule().getClassFromCache(className);
+        Class<?> clazz = getModule().getCache().getClassFromCache(className);
         if(clazz != null) {
             return clazz;
         }
@@ -221,7 +218,7 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
         if (loadedClass != null) {
             return loadedClass;
         }
-        Class<?> inCache = getModule().getClassFromCache(className);
+        Class<?> inCache = getModule().getCache().getClassFromCache(className);
         if(inCache != null) {
             return inCache;
         }
@@ -232,7 +229,7 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
         final Class<?> clazz = module.loadModuleClass(className, resolve);
 
         if (clazz != null) {
-            getModule().recordClass(clazz);
+            getModule().getCache().recordClass(clazz);
             return clazz;
         }
 
