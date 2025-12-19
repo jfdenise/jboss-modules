@@ -29,6 +29,7 @@ import java.util.List;
  */
 public abstract class ClassCache {
     public static final ClassCache DEFAULT = new DefaultClassCache();
+
     static class DefaultClassCache extends ClassCache {
 
         @Override
@@ -56,28 +57,32 @@ public abstract class ClassCache {
 
         @Override
         public Annotation getAnnotation(Class<?> clazz, Class<? extends Annotation> type) {
-            return null;
+            return clazz.getAnnotation(type);
         }
 
         @Override
         public Annotation getAnnotation(Class<?> clazz, Method m, Class<? extends Annotation> type) {
-            return null;
+            return m.getAnnotation(type);
         }
 
         @Override
         public Annotation[][] getParameterAnnotations(Class<?> clazz, Method m) {
-            return new Annotation[0][0];
+            return m.getParameterAnnotations();
         }
 
         @Override
         public Method[] getDeclaredMethods(Class<?> clazz) {
-            return new Method[0];
+            return clazz.getDeclaredMethods();
         }
 
         @Override
         public void recordClass(Class clazz) {
         }
 
+        @Override
+        public Method getMethod(Class<?> clazz, String name, Class<?>[] params) throws NoSuchMethodException {
+            return clazz.getMethod(name, params);
+        }
     }
     private Module module;
 
@@ -108,4 +113,6 @@ public abstract class ClassCache {
     public abstract Method[] getDeclaredMethods(Class<?> clazz);
 
     public abstract void recordClass(Class clazz);
+    
+    public abstract Method getMethod(Class<?> clazz, String name, Class<?>[] params) throws NoSuchMethodException;
 }
