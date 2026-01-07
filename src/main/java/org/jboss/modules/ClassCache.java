@@ -22,6 +22,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 /**
  *
@@ -45,7 +46,8 @@ public abstract class ClassCache {
         }
 
         @Override
-        public void addServiceToCache(String className) throws Exception {
+        public Set<String> addServiceToCache(String className) throws Exception {
+            return Collections.emptySet();
         }
 
         @Override
@@ -103,7 +105,7 @@ public abstract class ClassCache {
 
     public abstract Constructor getConstructorFromCache(String className, Class<?>... parameterTypes);
 
-    public abstract void addServiceToCache(String className) throws Exception;
+    public abstract Set<String> addServiceToCache(String className) throws Exception;
 
     public abstract List<Object> getServicesFromCache(Class<?> type);
 

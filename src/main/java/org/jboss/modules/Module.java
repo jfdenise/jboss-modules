@@ -43,6 +43,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.NoSuchElementException;
 import java.util.ServiceLoader;
 import java.util.Set;
@@ -1592,6 +1593,30 @@ public final class Module {
         return subtract;
     }
 
+    public Set<String> getServices() throws ModuleLoadException {
+        Set<String> services = new HashSet<>();
+        Map<String, List<LocalLoader>> paths = getPaths();
+        
+        for(Entry<String, List<LocalLoader>> entry : paths.entrySet()) {
+            if(entry.getKey().startsWith("META-INF/services")) {
+                //System.out.println("Service for " + getName() + " " + entry.getKey());
+                List<LocalLoader> l = paths.get(entry.getKey());
+                for(LocalLoader loader : l) {
+                    if (loader instanceof IterableLocalLoader) {
+                        IterableLocalLoader it = (IterableLocalLoader) loader;
+                        Iterator<Resource> res = it.iterateResources("META-INF/services", false);
+                        while(res.hasNext()) {
+                            String name = res.next().getName();
+                            name = name.substring(name.lastIndexOf("/")+1, name.length());
+                            //System.out.println(name);
+                            services.add(name);
+                        }
+                    }
+                }
+            }
+        }
+        return services;
+    }
     Map<String, List<LocalLoader>> getPaths() throws ModuleLoadException {
         Linkage oldLinkage = this.linkage;
         Linkage linkage;
