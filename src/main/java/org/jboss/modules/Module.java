@@ -477,10 +477,6 @@ public final class Module {
     public String getName() {
         return name;
     }
-    //Required by WildFly (this is an incompatible change in the dev branch).
-    public String getIdentifier() {
-        return name;
-    }
 
     /**
      * Get the module loader which created this module.
