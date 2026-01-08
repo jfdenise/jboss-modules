@@ -63,7 +63,7 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
             parallelOk = ClassLoader.registerAsParallelCapable();
         } catch (Throwable ignored) {
         }
-        if (!parallelOk) {
+        if (! parallelOk) {
             throw new Error("Failed to register " + ModuleClassLoader.class.getName() + " as parallel-capable");
         }
     }
@@ -294,6 +294,7 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
             // no loaders for this path
             return null;
         }
+
         // Check to see if we can define it locally it
         ClassSpec classSpec;
         ResourceLoader resourceLoader;
@@ -383,7 +384,6 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
 
     private Class<?> doDefineOrLoadClass(final String className, final byte[] bytes, final ByteBuffer byteBuffer, ProtectionDomain protectionDomain) {
         try {
-            
             final Class<?> definedClass = bytes != null ?
                 defineClass(className, bytes, 0, bytes.length, protectionDomain) :
                 defineClass(className, byteBuffer, protectionDomain);
