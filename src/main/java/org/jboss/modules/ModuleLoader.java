@@ -116,9 +116,6 @@ public class ModuleLoader {
     ModuleLoader(boolean canRedefine, boolean skipRegister, ModuleFinder[] finders) {
         this.canRedefine = canRedefine;
         this.finders = finders;
-        if (Boolean.getBoolean("org.wildfly.graal.build.time")) {
-            skipRegister = true;
-        }
         mxBean = skipRegister ? null : doPrivileged(new PrivilegedAction<ModuleLoaderMXBean>() {
             public ModuleLoaderMXBean run() {
                 ObjectName objectName;
