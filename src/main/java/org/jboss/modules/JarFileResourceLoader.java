@@ -45,8 +45,6 @@ import java.util.jar.JarFile;
 import java.util.jar.Manifest;
 
 import static java.security.AccessController.doPrivileged;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 import org.jboss.modules.log.ModuleLogger;
 
@@ -57,6 +55,7 @@ import org.jboss.modules.log.ModuleLogger;
  * @author <a href="mailto:ropalka@redhat.com">Richard Opalka</a>
  */
 final class JarFileResourceLoader extends AbstractResourceLoader implements IterableResourceLoader {
+    private JarFile jarFile;
     private final String rootName;
     private final URL rootUrl;
     private final String relativePath;
@@ -78,6 +77,9 @@ final class JarFileResourceLoader extends AbstractResourceLoader implements Iter
             throw new IllegalArgumentException("rootName is null");
         }
         fileOfJar = new File(jarFile.getName());
+        if (!Boolean.getBoolean("org.wildfly.graal.build.time")) {
+            this.jarFile = jarFile;
+        }
         this.rootName = rootName;
         String realPath = relativePath == null ? null : PathUtils.canonicalize(relativePath);
         if (realPath != null && realPath.endsWith("/")) realPath = realPath.substring(0, realPath.length() - 1);
@@ -90,6 +92,15 @@ final class JarFileResourceLoader extends AbstractResourceLoader implements Iter
             throw new IllegalArgumentException("Invalid root file specified", e);
         }
     }
+
+    private JarFile getJarFile() {
+        if (jarFile == null) {
+            return buildJarFile();
+        } else {
+            return jarFile;
+        }
+    }
+
     private JarFile buildJarFile() {
         try {
             return new JarFile(fileOfJar);
@@ -131,7 +142,7 @@ final class JarFileResourceLoader extends AbstractResourceLoader implements Iter
             return null;
         }
         final long size = entry.getSize();
-        try (final InputStream is = buildJarFile().getInputStream(entry)) {
+        try (final InputStream is = getJarFile().getInputStream(entry)) {
             if (size == -1) {
                 // size unknown
                 final ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -182,13 +193,13 @@ final class JarFileResourceLoader extends AbstractResourceLoader implements Iter
     }
 
     private JarEntry getJarEntry(final String fileName) {
-        JarFile jarFile =buildJarFile();
+        JarFile jarFile = getJarFile();
         return relativePath == null ? jarFile.getJarEntry(fileName) : jarFile.getJarEntry(relativePath + "/" + fileName);
     }
 
     public PackageSpec getPackageSpec(final String name) throws IOException {
         final Manifest manifest;
-         JarFile jarFile =buildJarFile();
+         JarFile jarFile = getJarFile();
         if (relativePath == null) {
             manifest = jarFile.getManifest();
         } else {
@@ -211,7 +222,7 @@ final class JarFileResourceLoader extends AbstractResourceLoader implements Iter
 
     public Resource getResource(String name) {
         try {
-            final JarFile jarFile = buildJarFile();
+            final JarFile jarFile = getJarFile();
             name = PathUtils.canonicalize(PathUtils.relativize(name));
             final JarEntry entry = getJarEntry(name);
             if (entry == null) {
@@ -259,7 +270,7 @@ final class JarFileResourceLoader extends AbstractResourceLoader implements Iter
         final String startName = PathUtils.canonicalize(PathUtils.relativize(startPath));
         List<String> directory = this.directory;
         if (directory == null) {
-            JarFile jarFile = buildJarFile();
+            JarFile jarFile = getJarFile();
             synchronized (jarFile) {
                 directory = this.directory;
                 if (directory == null) {
@@ -278,7 +289,7 @@ final class JarFileResourceLoader extends AbstractResourceLoader implements Iter
         final Iterator<String> iterator = directory.iterator();
         return new Iterator<>() {
             private Resource next;
-            private JarFile jarFile = buildJarFile();
+            private JarFile jarFile = getJarFile();
             public boolean hasNext() {
                 while (next == null) {
                     if (! iterator.hasNext()) {
@@ -315,7 +326,7 @@ final class JarFileResourceLoader extends AbstractResourceLoader implements Iter
     public Collection<String> getPaths() {
         final Collection<String> index = new HashSet<>();
         index.add("");
-        extractJarPaths(buildJarFile(), relativePath, index);
+        extractJarPaths(getJarFile(), relativePath, index);
         return index;
     }
 
@@ -324,11 +335,13 @@ final class JarFileResourceLoader extends AbstractResourceLoader implements Iter
         try {
             super.close();
         } finally {
-//            try {
-//                //jarFile.close();
-//            } catch (IOException e) {
-//                // ignored
-//            }
+            try {
+                if(jarFile != null) {
+                    jarFile.close();
+                }
+            } catch (IOException e) {
+                // ignored
+            }
         }
     }
 
@@ -343,7 +356,7 @@ final class JarFileResourceLoader extends AbstractResourceLoader implements Iter
     public ResourceLoader createSubloader(final String relativePath, final String rootName) {
         final String ourRelativePath = this.relativePath;
         final String fixedPath = PathUtils.relativize(PathUtils.canonicalize(relativePath));
-        return new JarFileResourceLoader(rootName, buildJarFile(), ourRelativePath == null ? fixedPath : ourRelativePath + "/" + fixedPath);
+        return new JarFileResourceLoader(rootName, getJarFile(), ourRelativePath == null ? fixedPath : ourRelativePath + "/" + fixedPath);
     }
 
     static void extractJarPaths(final JarFile jarFile, String relativePath, final Collection<String> index) {

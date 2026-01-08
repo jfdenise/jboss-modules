@@ -25,7 +25,7 @@ package org.jboss.modules;
  */
 public abstract class NamedClassLoader extends ClassLoader {
     static {
-        if (!ClassLoader.registerAsParallelCapable()) {
+        if (! ClassLoader.registerAsParallelCapable()) {
             throw new Error("Failed to register " + NamedClassLoader.class.getName() + " as parallel-capable");
         }
     }

@@ -531,7 +531,6 @@ public final class Module {
      */
     public static <S> ServiceLoader<S> loadServiceFromCallerModuleLoader(String name, Class<S> serviceType) throws ModuleLoadException {
         Class<?> caller = STACK_WALKER.getCallerClass();
-        //System.out.println("NAME" + name + "serviceTupe  " + serviceType + " CALLER CLASS " + caller.getName());
         assert ! caller.getPackageName().equals(Module.class.getPackageName());
         Module callerModule = forClass(caller);
         if (callerModule != null) {
@@ -777,11 +776,6 @@ public final class Module {
      * @return the class
      */
     Class<?> loadModuleClass(final String className, final boolean resolve) throws ClassNotFoundException {
-        
-        StringBuilder b = new StringBuilder();
-        for (String s : systemPackages) {
-            b.append(s +",");
-        }
         for (String s : systemPackages) {
             if (className.startsWith(s)) {
                 return moduleClassLoader.loadClass(className, resolve);

@@ -41,7 +41,7 @@ public abstract class ConcurrentClassLoader extends NamedClassLoader {
     private static final ThreadLocal<Boolean> GET_PACKAGE_SUPPRESSOR = new ThreadLocal<>();
 
     static {
-        if (!ClassLoader.registerAsParallelCapable()) {
+        if (! ClassLoader.registerAsParallelCapable()) {
             throw new Error("Failed to register " + ConcurrentClassLoader.class.getName() + " as parallel-capable");
         }
         /*
@@ -98,7 +98,7 @@ public abstract class ConcurrentClassLoader extends NamedClassLoader {
      */
     protected ConcurrentClassLoader(String name) {
         super(Utils.getPlatformClassLoader(), name);
-        if (!isRegisteredAsParallelCapable()) {
+        if (! isRegisteredAsParallelCapable()) {
             throw new Error("Cannot instantiate non-parallel subclass");
         }
     }
