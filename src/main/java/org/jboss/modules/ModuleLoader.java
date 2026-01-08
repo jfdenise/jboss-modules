@@ -756,8 +756,16 @@ public class ModuleLoader {
     }
 
     static final class MXBeanImpl implements ModuleLoaderMXBean {
-        private static final Cleaner cleaner = Cleaner.create();
+        private static final Cleaner cleaner;
 
+        static {
+            // In order to be able to load this class at build time
+            if (Boolean.getBoolean("org.wildfly.graal.build.time")) {
+                cleaner = null;
+            } else {
+                cleaner = Cleaner.create();
+            }
+        }
         private final WeakReference<ModuleLoader> reference;
 
         MXBeanImpl(final ModuleLoader moduleLoader, final ObjectName objectName) {
