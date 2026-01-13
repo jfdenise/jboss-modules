@@ -81,10 +81,6 @@ public abstract class ClassCache {
         }
 
         @Override
-        public void recordClass(Class clazz) {
-        }
-
-        @Override
         public Method getMethod(Class<?> clazz, String name, Class<?>[] params) throws NoSuchMethodException {
             return clazz.getMethod(name, params);
         }
@@ -118,8 +114,6 @@ public abstract class ClassCache {
     public abstract Annotation[][] getParameterAnnotations(Class<?> clazz, Method m);
 
     public abstract Method[] getDeclaredMethods(Class<?> clazz);
-
-    public abstract void recordClass(Class clazz);
     
     public abstract Method getMethod(Class<?> clazz, String name, Class<?>[] params) throws NoSuchMethodException;
 }

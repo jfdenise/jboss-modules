@@ -229,7 +229,6 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
         final Class<?> clazz = module.loadModuleClass(className, resolve);
 
         if (clazz != null) {
-            getModule().getCache().recordClass(clazz);
             return clazz;
         }
 
