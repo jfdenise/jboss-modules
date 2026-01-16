@@ -41,7 +41,7 @@ public abstract class ClassCache {
         }
 
         @Override
-        public Constructor getConstructorFromCache(String className, Class<?>... parameterTypes) {
+        public Constructor getConstructorFromCache(Class<?> clazz, Class<?>... parameterTypes) {
             return null;
         }
 
@@ -79,6 +79,15 @@ public abstract class ClassCache {
         public Method[] getDeclaredMethods(Class<?> clazz) {
             return clazz.getDeclaredMethods();
         }
+        
+        @Override
+        public Constructor[] getConstructors(Class<?> clazz) {
+            return clazz.getConstructors();
+        }
+        @Override
+        public Constructor[] getDeclaredConstructors(Class<?> clazz) {
+            return clazz.getDeclaredConstructors();
+        }
 
         @Override
         public Method getMethod(Class<?> clazz, String name, Class<?>[] params) throws NoSuchMethodException {
@@ -99,11 +108,13 @@ public abstract class ClassCache {
     
     public abstract void addClassToCache(String className) throws Exception;
 
-    public abstract Constructor getConstructorFromCache(String className, Class<?>... parameterTypes);
+    public abstract Constructor getConstructorFromCache(Class<?> clazz, Class<?>... parameterTypes);
 
     public abstract Set<String> addServiceToCache(String className) throws Exception;
 
     public abstract List<Object> getServicesFromCache(Class<?> type);
+    public abstract Constructor[] getConstructors(Class<?> type);
+    public abstract Constructor[] getDeclaredConstructors(Class<?> type);
 
     public abstract Class<?> getClassFromCache(String className);
 
