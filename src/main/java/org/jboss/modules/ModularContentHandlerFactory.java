@@ -30,7 +30,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 /**
  * @author <a href="mailto:david.lloyd@redhat.com">David M. Lloyd</a>
  */
-public final class ModularContentHandlerFactory implements ContentHandlerFactory {
+final class ModularContentHandlerFactory implements ContentHandlerFactory {
     private static final PrivilegedAction<String> CONTENT_MODULES_LIST_ACTION = new PropertyReadAction("jboss.content.handler.modules");
 
     private static final List<Module> modules;
@@ -66,7 +66,7 @@ public final class ModularContentHandlerFactory implements ContentHandlerFactory
         modules = list;
     }
 
-    public static final ModularContentHandlerFactory INSTANCE = new ModularContentHandlerFactory();
+    static final ModularContentHandlerFactory INSTANCE = new ModularContentHandlerFactory();
 
     static void addHandlerModule(Module module) {
         modules.add(module);

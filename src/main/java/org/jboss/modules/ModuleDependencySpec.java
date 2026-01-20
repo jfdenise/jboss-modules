@@ -80,6 +80,7 @@ public final class ModuleDependencySpec extends DependencySpec {
     public String getName() {
         return name;
     }
+
     /**
      * Determine whether this dependency is optional.
      *

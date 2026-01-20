@@ -197,25 +197,16 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
         return localLoader;
     }
 
-    // In order to have an Alias in the substitute
-    private Class<?> getLoadedClass(String className, boolean resolve) {
-        Class<?> loadedClass = findLoadedClass(className);
-        if (loadedClass != null) {
-         //   System.out.println("CLASS " + className + " Already loaded");
-            if (resolve) {
-                resolveClass(loadedClass);
-            }
-            return loadedClass;
-        }
-        return null;
-    }
     /** {@inheritDoc} */
     @Override
     protected final Class<?> findClass(String className, boolean exportsOnly, final boolean resolve) throws ClassNotFoundException {
         className = className.replace('/', '.');
         // Check if we have already loaded it..
-        Class<?> loadedClass = getLoadedClass(className, resolve);
+        Class<?> loadedClass = findLoadedClass(className);
         if (loadedClass != null) {
+            if (resolve) {
+                resolveClass(loadedClass);
+            }
             return loadedClass;
         }
         Class<?> inCache = getModule().getCache().getClassFromCache(className);
@@ -398,7 +389,7 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
         }
     }
 
-    private IdentityHashMap<CodeSource, ProtectionDomain> protectionDomains = new IdentityHashMap<>();
+    private final IdentityHashMap<CodeSource, ProtectionDomain> protectionDomains = new IdentityHashMap<>();
 
     private ProtectionDomain getProtectionDomain(CodeSource codeSource) {
         final IdentityHashMap<CodeSource, ProtectionDomain> map = protectionDomains;
