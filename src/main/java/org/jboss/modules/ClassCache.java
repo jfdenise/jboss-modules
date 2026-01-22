@@ -34,9 +34,6 @@ public abstract class ClassCache {
     static class DefaultClassCache extends ClassCache {
 
         @Override
-        public void addClassToCache(String className, Class<?>... parameterTypes) throws Exception {
-        }
-        @Override
         public void addClassToCache(String className) throws Exception {
         }
 
@@ -104,8 +101,6 @@ public abstract class ClassCache {
         return module;
     }
 
-    public abstract void addClassToCache(String className, Class<?>... parameterTypes) throws Exception;
-    
     public abstract void addClassToCache(String className) throws Exception;
 
     public abstract Constructor getConstructorFromCache(Class<?> clazz, Class<?>... parameterTypes);

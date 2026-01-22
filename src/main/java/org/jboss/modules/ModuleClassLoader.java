@@ -55,7 +55,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * @apiviz.landmark
  */
-public class ModuleClassLoader extends ConcurrentClassLoader {
+public class ModuleClassLoader extends ConcurrentClassLoader implements CacheHandler {
 
     static {
         boolean parallelOk = true;
@@ -834,6 +834,11 @@ public class ModuleClassLoader extends ConcurrentClassLoader {
      */
     public final Set<String> getLocalPaths() {
         return Collections.unmodifiableSet(paths.get().getAllPaths().keySet());
+    }
+
+    @Override
+    public ClassCache getCache() {
+        return getModule().getCache();
     }
 
     /**
