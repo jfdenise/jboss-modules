@@ -103,7 +103,7 @@ final class JarFileResourceLoader extends AbstractResourceLoader implements Iter
 
     private JarFile buildJarFile() {
         try {
-            return new JarFile(fileOfJar);
+            return new JarFile(fileOfJar, true, JarFile.OPEN_READ, JarFile.runtimeVersion());
         } catch (Exception ex) {
             throw new RuntimeException(ex);
         }
@@ -136,13 +136,14 @@ final class JarFileResourceLoader extends AbstractResourceLoader implements Iter
 
     public synchronized ClassSpec getClassSpec(final String fileName) throws IOException {
         final ClassSpec spec = new ClassSpec();
-        final JarEntry entry = getJarEntry(fileName);
+        JarFile jarFile = getJarFile();
+        final JarEntry entry = getJarEntry(jarFile, fileName);
         if (entry == null) {
             // no such entry
             return null;
         }
         final long size = entry.getSize();
-        try (final InputStream is = getJarFile().getInputStream(entry)) {
+        try (final InputStream is = jarFile.getInputStream(entry)) {
             if (size == -1) {
                 // size unknown
                 final ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -192,8 +193,7 @@ final class JarFileResourceLoader extends AbstractResourceLoader implements Iter
         return codeSource;
     }
 
-    private JarEntry getJarEntry(final String fileName) {
-        JarFile jarFile = getJarFile();
+    private JarEntry getJarEntry(JarFile jarFile, final String fileName) {
         return relativePath == null ? jarFile.getJarEntry(fileName) : jarFile.getJarEntry(relativePath + "/" + fileName);
     }
 
@@ -203,7 +203,7 @@ final class JarFileResourceLoader extends AbstractResourceLoader implements Iter
         if (relativePath == null) {
             manifest = jarFile.getManifest();
         } else {
-            JarEntry jarEntry = getJarEntry("META-INF/MANIFEST.MF");
+            JarEntry jarEntry = getJarEntry(jarFile, "META-INF/MANIFEST.MF");
             if (jarEntry == null) {
                 manifest = null;
             } else {
@@ -224,7 +224,7 @@ final class JarFileResourceLoader extends AbstractResourceLoader implements Iter
         try {
             final JarFile jarFile = getJarFile();
             name = PathUtils.canonicalize(PathUtils.relativize(name));
-            final JarEntry entry = getJarEntry(name);
+            final JarEntry entry = getJarEntry(jarFile, name);
             if (entry == null) {
                 return null;
             }
