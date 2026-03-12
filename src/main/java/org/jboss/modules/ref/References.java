@@ -49,16 +49,20 @@ public final class References {
     private References() {
     }
 
+    public static void startReaperThread() {
+        final ReaperThread thr = new ReaperThread();
+        thr.setName("Reference Reaper");
+        thr.setDaemon(true);
+        thr.start();
+    }
+
     static final class ReaperThread extends Thread {
         static final ReferenceQueue<Object> REAPER_QUEUE = new ReferenceQueue<>();
 
         static {
-            final ReaperThread thr = new ReaperThread();
-            thr.setName("Reference Reaper");
-            thr.setDaemon(true);
-            thr.start();
+            startReaperThread();
         }
-
+        
         public void run() {
             for (;;) try {
                 final java.lang.ref.Reference<? extends Object> ref = REAPER_QUEUE.remove();
