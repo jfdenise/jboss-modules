@@ -628,6 +628,16 @@ public class ModuleClassLoader extends ConcurrentClassLoader implements CacheHan
     @Override
     public final InputStream findResourceAsStream(final String name, boolean exportsOnly) {
         try {
+            if (name.equals("META-INF/validation.xml")) {
+                System.out.println("Find resource " + name);
+            }
+            if (name.equals("META-INF/constraint-mapping.xml")) {
+                System.out.println("Find resource " + name);
+            }
+            InputStream inCache = getModule().getCache().getResourceAsStream(name);
+            if (inCache != null) {
+                return inCache;
+            }
             return module.getResourceAsStream(name);
         } catch (IOException e) {
             return null;

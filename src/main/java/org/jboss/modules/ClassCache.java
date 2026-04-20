@@ -17,6 +17,8 @@
  */
 package org.jboss.modules;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
@@ -90,6 +92,15 @@ public abstract class ClassCache {
         public Method getMethod(Class<?> clazz, String name, Class<?>[] params) throws NoSuchMethodException {
             return clazz.getMethod(name, params);
         }
+
+        @Override
+        public void addResourceToCache(String path) {
+        }
+
+        @Override
+        public InputStream getResourceAsStream(String path) throws IOException {
+            return getModule().getResourceAsStream(path);
+        }
     }
     private Module module;
 
@@ -122,4 +133,7 @@ public abstract class ClassCache {
     public abstract Method[] getDeclaredMethods(Class<?> clazz);
     
     public abstract Method getMethod(Class<?> clazz, String name, Class<?>[] params) throws NoSuchMethodException;
+    
+    public abstract void addResourceToCache(String path) throws IOException;
+    public abstract InputStream getResourceAsStream(String path) throws IOException;
 }
