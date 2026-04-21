@@ -99,7 +99,7 @@ public abstract class ClassCache {
 
         @Override
         public InputStream getResourceAsStream(String path) throws IOException {
-            return getModule().getResourceAsStream(path);
+            return null;
         }
     }
     private Module module;
